@@ -51,11 +51,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
           backgroundColor: AppTheme.tealPrimary,
           content: Row(
             children: [
-              const Icon(Icons.check_circle_outline, color: Color(0xFF042F2E), size: 20),
+              const Icon(Icons.check_circle_outline, color: AppTheme.tealDark, size: 20),
               const SizedBox(width: 8),
               const Text(
                 "Category budgets saved successfully!",
-                style: TextStyle(color: Color(0xFF042F2E), fontWeight: FontWeight.w700),
+                style: TextStyle(color: AppTheme.tealDark, fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -201,7 +201,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
                         value: _monthlyCap > 0 ? (totalAllocated / _monthlyCap).clamp(0.0, 1.0) : 0.0,
-                        backgroundColor: const Color(0x1FFFFFFF),
+                        backgroundColor: const Color(0x80FFFFFF),
                         color: isOverCap ? AppTheme.roseDanger : AppTheme.tealPrimary,
                         minHeight: 7,
                       ),
@@ -277,7 +277,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                         max: _monthlyCap > 0 ? _monthlyCap : 50000,
                         divisions: 100,
                         activeColor: AppTheme.tealPrimary,
-                        inactiveColor: const Color(0x1FFFFFFF),
+                        inactiveColor: const Color(0x80FFFFFF),
                         onChanged: (val) => _updateBudgetAmount(b, val.roundToDouble()),
                       ),
                     ],

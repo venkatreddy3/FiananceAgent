@@ -1,11 +1,19 @@
 import os
-from datetime import datetime, date
+import uuid
+from datetime import datetime, timezone, date
 from typing import Optional, List, Dict, Any
 from sqlmodel import Field, SQLModel, create_engine, Session, select
 import json
 
+def get_current_utc():
+    return datetime.now(timezone.utc)
+
+def get_current_period():
+    return datetime.now(timezone.utc).strftime("%Y-%m")
+
 class Transaction(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    uuid: str = Field(default_factory=lambda: str(uuid.uuid4()), index=True, unique=True)
     title: str
     amount: float
     merchant: str
@@ -20,21 +28,21 @@ class Transaction(SQLModel, table=True):
     is_recurring: bool = False
     ai_flagged: bool = False
     ai_flag_reason: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=get_current_utc)
 
 class MerchantDictionary(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     merchant_key: str = Field(unique=True, index=True) # Normalized merchant name
     category: str
     learned_from_user: bool = False
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=get_current_utc)
 
 class Budget(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     category: str
     allocated_amount: float
     spent_amount: float = 0.0
-    period: str = "2026-09" # YYYY-MM
+    period: str = Field(default_factory=get_current_period) # YYYY-MM
 
 class SavingsGoal(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -45,7 +53,7 @@ class SavingsGoal(SQLModel, table=True):
     category: str = "Gadgets" # "Safety", "Travel", "Gadgets", "Education", "General"
     status: str = "active" # "active", "achieved", "at_risk"
     monthly_target: float = 0.0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=get_current_utc)
 
 class GoalContribution(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -54,7 +62,7 @@ class GoalContribution(SQLModel, table=True):
     date: str # YYYY-MM-DD
     source: str = "reallocation" # "reallocation", "manual", "auto"
     notes: Optional[str] = "virtual reallocation - no money is moved"
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=get_current_utc)
 
 class GoalMonthlyPlan(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -70,26 +78,12 @@ class AgentMessage(SQLModel, table=True):
     role: str # "user", "assistant", "system"
     content: str
     thought_trace: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=get_current_utc)
 
 sqlite_file_name = "fintrack.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 
 engine = create_engine(sqlite_url, echo=False)
-
-def init_db():
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        # Check if merchant dictionary is seeded
-        existing_dict = session.exec(select(MerchantDictionary)).first()
-        if not existing_dict:
-            seed_merchant_dictionary(session)
-            
-        # Only seed demo data if explicit env flag SEED_DEMO_DATA is true
-        if os.environ.get("SEED_DEMO_DATA", "").lower() in ("1", "true", "yes"):
-            existing_tx = session.exec(select(Transaction)).first()
-            if not existing_tx:
-                seed_data(session)
 
 def seed_merchant_dictionary(session: Session):
     """Seed comprehensive dictionary of popular Indian & Global merchants"""
@@ -128,6 +122,8 @@ def seed_merchant_dictionary(session: Session):
         ("zara", "Shopping"),
         ("h&m", "Shopping"),
         ("target", "Shopping"),
+        ("dmart", "Shopping"),
+        ("d-mart", "Shopping"),
         
         # Bills & Utilities
         ("bescom", "Bills & Utilities"),
@@ -197,6 +193,23 @@ def seed_data(session: Session):
     for item in sample_transactions + sample_budgets + sample_goals:
         session.add(item)
     session.commit()
+
+def init_db():
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        # Check if merchant dictionary is seeded
+        existing_dict = session.exec(select(MerchantDictionary)).first()
+        if not existing_dict:
+            seed_merchant_dictionary(session)
+            
+        # Only seed demo data if explicit env flag SEED_DEMO_DATA is true
+        if os.environ.get("SEED_DEMO_DATA", "").lower() in ("1", "true", "yes"):
+            existing_tx = session.exec(select(Transaction)).first()
+            if not existing_tx:
+                seed_data(session)
+
+# Ensure tables and dictionary exist on startup
+init_db()
 
 def get_session():
     with Session(engine) as session:

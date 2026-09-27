@@ -11,10 +11,16 @@ class ApiService {
   String get baseUrl => StorageService().baseUrl;
   set baseUrl(String val) => StorageService().baseUrl = val;
 
-  Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        'X-API-Key': StorageService().apiKey,
-      };
+  Map<String, String> get _headers {
+    final key = StorageService().apiKey;
+    final headers = {
+      'Content-Type': 'application/json',
+    };
+    if (key.isNotEmpty) {
+      headers['X-API-Key'] = key;
+    }
+    return headers;
+  }
 
   bool isBackendOnline = false;
 
@@ -23,7 +29,6 @@ class ApiService {
     try {
       final res = await http.get(
         Uri.parse('$baseUrl/api/health'),
-        headers: _headers,
       ).timeout(const Duration(seconds: 3));
 
       if (res.statusCode == 200) {
@@ -47,11 +52,11 @@ class ApiService {
         isBackendOnline = true;
         final List list = json.decode(res.body);
         final txs = list.map((item) => TransactionModel.fromJson(item)).toList();
-        // Sync to local storage
+        // Merge by uuid in local storage
         for (var t in txs) {
           await StorageService().saveTransaction(t);
         }
-        return txs;
+        return StorageService().getTransactions();
       }
     } catch (_) {
       isBackendOnline = false;
@@ -61,80 +66,56 @@ class ApiService {
   }
 
   Future<TransactionModel> addTransaction(TransactionModel tx) async {
-    // 1. Save to local storage first (offline-first)
-    await StorageService().saveTransaction(tx);
+    // 1. Save to local storage first (offline-first with UUID)
+    final savedTx = await StorageService().saveTransaction(tx);
 
-    // Update local budget spent
-    final budgets = StorageService().getBudgets();
-    for (var b in budgets) {
-      if (b.category == tx.category && tx.type == "expense") {
-        b.spentAmount += tx.amount;
-        await StorageService().saveBudget(b);
-      }
-    }
-
-    // 2. Try to sync to backend
+    // 2. Try to sync to backend (upsert by uuid)
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/api/transactions'),
         headers: _headers,
-        body: json.encode(tx.toJson()),
+        body: json.encode(savedTx.toJson()),
       ).timeout(const Duration(seconds: 4));
 
       if (res.statusCode == 200) {
         isBackendOnline = true;
-        return TransactionModel.fromJson(json.decode(res.body));
+        final backendTx = TransactionModel.fromJson(json.decode(res.body));
+        await StorageService().saveTransaction(backendTx);
+        return backendTx;
       }
     } catch (_) {
       isBackendOnline = false;
     }
 
-    return tx;
+    return savedTx;
   }
 
   Future<TransactionModel> updateTransaction(TransactionModel tx, {String? previousCategory}) async {
-    final existingList = StorageService().getTransactions();
-    final oldTx = existingList.firstWhere(
-      (t) => t.id == tx.id,
-      orElse: () => tx,
-    );
-    final oldCat = previousCategory ?? oldTx.category;
-
-    if (oldCat != tx.category && tx.type == "expense") {
-      final budgets = StorageService().getBudgets();
-      for (var b in budgets) {
-        if (b.category == oldCat) {
-          b.spentAmount = (b.spentAmount - tx.amount).clamp(0.0, double.infinity);
-          await StorageService().saveBudget(b);
-        }
-        if (b.category == tx.category) {
-          b.spentAmount += tx.amount;
-          await StorageService().saveBudget(b);
-        }
-      }
-    }
-
     final saved = await StorageService().saveTransaction(tx);
     try {
-      if (tx.id != null) {
-        final res = await http.put(
-          Uri.parse('$baseUrl/api/transactions/${tx.id}'),
-          headers: _headers,
-          body: json.encode(tx.toJson()),
-        ).timeout(const Duration(seconds: 4));
-        if (res.statusCode == 200) {
-          return TransactionModel.fromJson(json.decode(res.body));
-        }
+      final res = await http.put(
+        Uri.parse('$baseUrl/api/transactions/by-uuid/${tx.uuid}'),
+        headers: _headers,
+        body: json.encode(tx.toJson()),
+      ).timeout(const Duration(seconds: 4));
+      if (res.statusCode == 200) {
+        final backendTx = TransactionModel.fromJson(json.decode(res.body));
+        await StorageService().saveTransaction(backendTx);
+        return backendTx;
       }
     } catch (_) {}
     return saved;
   }
 
-  Future<bool> deleteTransaction(int id) async {
-    await StorageService().deleteTransaction(id);
+  Future<bool> deleteTransaction(dynamic idOrUuid) async {
+    if (idOrUuid is String) {
+      await StorageService().deleteTransaction(idOrUuid);
+    } else if (idOrUuid is int) {
+      await StorageService().deleteTransactionById(idOrUuid);
+    }
     try {
       final res = await http.delete(
-        Uri.parse('$baseUrl/api/transactions/$id'),
+        Uri.parse('$baseUrl/api/transactions/$idOrUuid'),
         headers: _headers,
       ).timeout(const Duration(seconds: 4));
       return res.statusCode == 200;
@@ -143,10 +124,11 @@ class ApiService {
   }
 
   // --- Budgets ---
-  Future<List<BudgetModel>> getBudgets() async {
+  Future<List<BudgetModel>> getBudgets([String? period]) async {
+    final curPeriod = period ?? DateTime.now().toIso8601String().substring(0, 7);
     try {
       final res = await http.get(
-        Uri.parse('$baseUrl/api/budgets'),
+        Uri.parse('$baseUrl/api/budgets?period=$curPeriod'),
         headers: _headers,
       ).timeout(const Duration(seconds: 4));
 
@@ -157,12 +139,12 @@ class ApiService {
         for (var b in budgets) {
           await StorageService().saveBudget(b);
         }
-        return budgets;
+        return StorageService().getBudgets(curPeriod);
       }
     } catch (_) {
       isBackendOnline = false;
     }
-    return StorageService().getBudgets();
+    return StorageService().getBudgets(curPeriod);
   }
 
   Future<BudgetModel> createOrUpdateBudget(BudgetModel b) async {
@@ -249,7 +231,7 @@ class ApiService {
       catMap[t.category] = (catMap[t.category] ?? 0.0) + t.amount;
     }
 
-    final needsCats = {"Housing", "Bills & Utilities", "Food & Dining", "Transportation", "Healthcare"};
+    final needsCats = {"Housing", "Bills & Utilities", "Food & Dining", "Transportation", "Healthcare", "Groceries"};
     double needsSpent = 0.0;
     double wantsSpent = 0.0;
 
@@ -332,7 +314,7 @@ class ApiService {
         return json.decode(res.body);
       }
     } catch (_) {}
-    return null; // When offline, AI goal reallocation is paused
+    return null;
   }
 
   Future<bool> confirmReallocation(int goalId, double additionAmount, Map<String, dynamic> adjustments) async {

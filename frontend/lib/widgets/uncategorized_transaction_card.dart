@@ -48,6 +48,7 @@ class _UncategorizedTransactionCardState extends State<UncategorizedTransactionC
     final tx = widget.transaction;
     final updatedTx = TransactionModel(
       id: tx.id,
+      uuid: tx.uuid,
       title: tx.title,
       amount: tx.amount,
       merchant: tx.merchant,

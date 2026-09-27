@@ -41,6 +41,8 @@ class CategorizationService {
     "ajio": "Shopping",
     "nike": "Shopping",
     "zara": "Shopping",
+    "dmart": "Shopping",
+    "d-mart": "Shopping",
     "bescom": "Bills & Utilities",
     "airtel": "Bills & Utilities",
     "jio": "Bills & Utilities",
@@ -89,7 +91,7 @@ class CategorizationService {
     "snacks": "Food & Dining",
     "supermarket": "Food & Dining",
     "grocery": "Food & Dining",
-    "mart": "Food & Dining",
+    "mart": "Shopping",
     "hospital": "Healthcare",
     "clinic": "Healthcare",
     "medicals": "Healthcare",
@@ -119,7 +121,7 @@ class CategorizationService {
     } catch (_) {}
   }
 
-  /// 4-Method Categorization Cascade
+  /// 4-Method Categorization Cascade (Dictionary and keywords evaluated BEFORE P2P fallback)
   Future<Map<String, dynamic>> categorize({
     required String merchantName,
     required double amount,
@@ -133,17 +135,7 @@ class CategorizationService {
       return _cache[cleanKey]!;
     }
 
-    if (isP2P) {
-      final res = {
-        "category": "Uncategorized",
-        "confidence": 0.40,
-        "method": "p2p_detected",
-      };
-      _cache[cleanKey] = res;
-      return res;
-    }
-
-    // --- Method 1: Local Merchant Dictionary (Cheapest / Instant) ---
+    // --- Method 1: Local Merchant Dictionary (Exact) ---
     if (_localDictionary.containsKey(cleanKey)) {
       final res = {
         "category": _localDictionary[cleanKey]!,
@@ -154,7 +146,7 @@ class CategorizationService {
       return res;
     }
 
-    // Word-boundary match on cleanKey (merchant name only)
+    // --- Method 1b: Local Merchant Dictionary (Whole-word pattern) ---
     for (var entry in _localDictionary.entries) {
       final pattern = RegExp(r'\b' + RegExp.escape(entry.key) + r'\b', caseSensitive: false);
       if (pattern.hasMatch(cleanKey)) {
@@ -168,7 +160,7 @@ class CategorizationService {
       }
     }
 
-    // --- Method 2: Keyword Rules (Whole-word regex match on merchant name ONLY) ---
+    // --- Method 2: Keyword Rules (Whole-word regex on merchant name) ---
     for (var entry in _keywordRules.entries) {
       final pattern = RegExp(r'\b' + RegExp.escape(entry.key) + r'\b', caseSensitive: false);
       if (pattern.hasMatch(cleanKey)) {
@@ -180,6 +172,17 @@ class CategorizationService {
         _cache[cleanKey] = res;
         return res;
       }
+    }
+
+    // If still unresolved and P2P detected
+    if (isP2P) {
+      final res = {
+        "category": "P2P Transfer",
+        "confidence": 0.40,
+        "method": "p2p_detected",
+      };
+      _cache[cleanKey] = res;
+      return res;
     }
 
     // --- Method 3: resolveMerchant (Google Places API / Cloud Function) ---
@@ -228,12 +231,14 @@ class CategorizationService {
 
   Future<String?> _resolveWithGooglePlaces(String merchantName) async {
     try {
+      final headers = {'Content-Type': 'application/json'};
+      final key = StorageService().apiKey;
+      if (key.isNotEmpty) {
+        headers['X-API-Key'] = key;
+      }
       final res = await http.post(
         Uri.parse('${ApiService().baseUrl}/api/resolve-merchant'),
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': StorageService().apiKey,
-        },
+        headers: headers,
         body: json.encode({'merchant_name': merchantName}),
       ).timeout(const Duration(seconds: 3));
       if (res.statusCode == 200) {

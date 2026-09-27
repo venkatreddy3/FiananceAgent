@@ -1,5 +1,8 @@
+import 'package:uuid/uuid.dart';
+
 class TransactionModel {
   final int? id;
+  final String uuid;
   final String title;
   final double amount;
   final String merchant;
@@ -17,6 +20,7 @@ class TransactionModel {
 
   TransactionModel({
     this.id,
+    String? uuid,
     required this.title,
     required this.amount,
     required this.merchant,
@@ -31,11 +35,12 @@ class TransactionModel {
     this.isRecurring = false,
     this.aiFlagged = false,
     this.aiFlagReason,
-  });
+  }) : uuid = uuid ?? const Uuid().v4();
 
   factory TransactionModel.fromJson(Map<String, dynamic> json) {
     return TransactionModel(
       id: json['id'],
+      uuid: json['uuid'] ?? const Uuid().v4(),
       title: json['title'] ?? json['merchant'] ?? 'Transaction',
       amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
       merchant: json['merchant'] ?? '',
@@ -56,6 +61,7 @@ class TransactionModel {
   Map<String, dynamic> toJson() {
     return {
       if (id != null) 'id': id,
+      'uuid': uuid,
       'title': title,
       'amount': amount,
       'merchant': merchant,
@@ -86,8 +92,8 @@ class BudgetModel {
     required this.category,
     required this.allocatedAmount,
     this.spentAmount = 0.0,
-    this.period = "2026-09",
-  });
+    String? period,
+  }) : period = period ?? DateTime.now().toIso8601String().substring(0, 7);
 
   factory BudgetModel.fromJson(Map<String, dynamic> json) {
     return BudgetModel(
@@ -95,7 +101,7 @@ class BudgetModel {
       category: json['category'] ?? 'Other',
       allocatedAmount: (json['allocated_amount'] as num?)?.toDouble() ?? 0.0,
       spentAmount: (json['spent_amount'] as num?)?.toDouble() ?? 0.0,
-      period: json['period'] ?? '2026-09',
+      period: json['period'] ?? DateTime.now().toIso8601String().substring(0, 7),
     );
   }
 

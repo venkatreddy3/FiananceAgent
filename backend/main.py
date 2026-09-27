@@ -1,8 +1,9 @@
 import os
 import json
+import uuid as py_uuid
 from contextlib import asynccontextmanager
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, Depends, HTTPException, Query, Header, status
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Query, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -13,15 +14,21 @@ from database import init_db, get_session, Transaction, Budget, SavingsGoal, Goa
 from ollama_service import ollama_service
 from agents import agent_coordinator
 
-API_KEY = os.environ.get("API_KEY", "fintrack_secret_key")
+# Security: API_KEY must come from .env with no default; refuse to start if missing.
+API_KEY = os.environ.get("API_KEY")
+if not API_KEY:
+    # Check if testing mode or set default in non-prod if needed, else raise RuntimeError
+    # For robust local dev, allow fallback only if explicitly marked DEV, else enforce
+    API_KEY = os.environ.get("FINTRACK_API_KEY") or os.environ.get("API_KEY")
+    if not API_KEY:
+        raise RuntimeError("API_KEY environment variable is required. Please set API_KEY in your .env file.")
+
 GOOGLE_PLACES_API_KEY = os.environ.get("GOOGLE_PLACES_API_KEY", "")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Lifespan startup
     init_db()
     yield
-    # Lifespan shutdown
 
 app = FastAPI(
     title="FinTrack Proactive AI Financial Orchestrator",
@@ -29,7 +36,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS configuration
+# CORS configuration (No "*" wildcard, allow_credentials=False)
 allowed_origins = [
     "http://localhost",
     "http://localhost:3000",
@@ -37,26 +44,41 @@ allowed_origins = [
     "http://127.0.0.1",
     "http://127.0.0.1:8000",
     "http://10.0.2.2",
-    "http://10.0.2.2:8000",
-    "*"
+    "http://10.0.2.2:8000"
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
 def verify_api_key(x_api_key: Optional[str] = Header(None)):
-    """Simple shared API token validation"""
-    if x_api_key and x_api_key != API_KEY:
+    """Reject when the header is missing OR wrong"""
+    if not x_api_key or x_api_key != API_KEY:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing X-API-Key header"
         )
     return x_api_key
+
+# --- Health & Diagnostics (Unprotected) ---
+@app.get("/api/health")
+async def health_check():
+    ollama_ok = await ollama_service.is_available()
+    models = await ollama_service.list_models() if ollama_ok else []
+    return {
+        "status": "healthy",
+        "service": "FinTrack Agent Hub",
+        "ollama_connected": ollama_ok,
+        "available_models": models,
+        "version": "2.5.0"
+    }
+
+# Protected API Router with verify_api_key attached to EVERY /api route
+api_router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 # --- Helper: Calculate Budget Alerts ---
 def check_budget_alerts(category: str, period: str, session: Session) -> List[Dict[str, Any]]:
@@ -69,7 +91,6 @@ def check_budget_alerts(category: str, period: str, session: Session) -> List[Di
         budget = session.exec(select(Budget).where(Budget.category == category)).first()
         
     if budget and budget.allocated_amount > 0:
-        # Calculate real spent from transactions for this month
         month_txs = session.exec(
             select(Transaction).where(
                 Transaction.category == category,
@@ -94,39 +115,24 @@ def check_budget_alerts(category: str, period: str, session: Session) -> List[Di
             
     return alerts
 
-# --- Health & Diagnostics ---
-@app.get("/api/health")
-async def health_check():
-    ollama_ok = await ollama_service.is_available()
-    models = await ollama_service.list_models() if ollama_ok else []
-    return {
-        "status": "healthy",
-        "service": "FinTrack Agent Hub",
-        "ollama_connected": ollama_ok,
-        "available_models": models,
-        "version": "2.5.0"
-    }
-
 # --- Google Places API / resolveMerchant ---
 
 class ResolveMerchantRequest(BaseModel):
     merchant_name: str
 
-@app.post("/api/resolve-merchant")
+@api_router.post("/resolve-merchant")
 async def resolve_merchant_places(
     req: ResolveMerchantRequest,
     session: Session = Depends(get_session)
 ):
     clean = req.merchant_name.lower().strip()
     
-    # 1. First check if already cached in MerchantDictionary
     cached = session.exec(
         select(MerchantDictionary).where(MerchantDictionary.merchant_key == clean)
     ).first()
     if cached:
         return {"found": True, "category": cached.category, "merchant": req.merchant_name, "source": "dictionary"}
 
-    # 2. Call Google Places Text Search if API key is present
     if GOOGLE_PLACES_API_KEY:
         try:
             async with httpx.AsyncClient(timeout=4.0) as client:
@@ -177,7 +183,6 @@ async def resolve_merchant_places(
         except Exception:
             pass
 
-    # 3. Fallback to local table
     places_lookup = {
         "naturals": "Personal",
         "jawed habib": "Personal",
@@ -212,7 +217,7 @@ class LearnDictionaryRequest(BaseModel):
     merchant_key: str
     category: str
 
-@app.post("/api/dictionary/learn")
+@api_router.post("/dictionary/learn")
 def learn_merchant_dictionary(
     req: LearnDictionaryRequest,
     session: Session = Depends(get_session)
@@ -225,14 +230,14 @@ def learn_merchant_dictionary(
     if existing:
         existing.category = req.category
         existing.learned_from_user = True
-        existing.last_updated = datetime.utcnow()
+        existing.last_updated = datetime.now(timezone.utc)
         session.add(existing)
     else:
         session.add(MerchantDictionary(
             merchant_key=clean_key,
             category=req.category,
             learned_from_user=True,
-            last_updated=datetime.utcnow()
+            last_updated=datetime.now(timezone.utc)
         ))
     session.commit()
     return {"status": "learned", "merchant_key": clean_key, "category": req.category}
@@ -244,7 +249,7 @@ class NotificationParseRequest(BaseModel):
     source_app: Optional[str] = "notification"
     model: Optional[str] = None
 
-@app.post("/api/capture/parse-notification")
+@api_router.post("/capture/parse-notification")
 async def parse_and_categorize_notification(
     req: NotificationParseRequest,
     session: Session = Depends(get_session)
@@ -285,27 +290,47 @@ async def parse_and_categorize_notification(
         "transaction": transaction_created
     }
 
-# --- Transactions Ledger ---
+# --- Transactions Ledger (UUID Reconciliation) ---
 
-@app.get("/api/transactions", response_model=List[Transaction])
+@api_router.get("/transactions")
 def list_transactions(session: Session = Depends(get_session)):
     statement = select(Transaction).order_by(Transaction.date.desc())
-    return session.exec(statement).all()
+    return [t.model_dump() for t in session.exec(statement).all()]
 
-@app.post("/api/transactions")
-def create_transaction(tx: Transaction, session: Session = Depends(get_session)):
-    session.add(tx)
-    session.commit()
-    session.refresh(tx)
+@api_router.post("/transactions")
+def create_or_upsert_transaction(tx: Transaction, session: Session = Depends(get_session)):
+    # ID Reconciliation: Check if uuid already exists
+    existing = session.exec(select(Transaction).where(Transaction.uuid == tx.uuid)).first()
+    if existing:
+        existing.title = tx.title
+        existing.amount = tx.amount
+        existing.merchant = tx.merchant
+        existing.raw_text = tx.raw_text
+        existing.category = tx.category
+        existing.source = tx.source
+        existing.type = tx.type
+        existing.date = tx.date
+        existing.confidence = tx.confidence
+        existing.status = tx.status
+        existing.notes = tx.notes
+        existing.is_recurring = tx.is_recurring
+        session.add(existing)
+        session.commit()
+        session.refresh(existing)
+        tx = existing
+    else:
+        session.add(tx)
+        session.commit()
+        session.refresh(tx)
     
-    # Auto-learn merchant mapping if user confirmed
+    # Auto-learn merchant mapping if confirmed
     if tx.status == "confirmed" and tx.merchant:
         clean_key = tx.merchant.strip().lower()
-        existing = session.exec(select(MerchantDictionary).where(MerchantDictionary.merchant_key == clean_key)).first()
-        if existing:
-            existing.category = tx.category
-            existing.learned_from_user = True
-            session.add(existing)
+        dict_entry = session.exec(select(MerchantDictionary).where(MerchantDictionary.merchant_key == clean_key)).first()
+        if dict_entry:
+            dict_entry.category = tx.category
+            dict_entry.learned_from_user = True
+            session.add(dict_entry)
         else:
             session.add(MerchantDictionary(merchant_key=clean_key, category=tx.category, learned_from_user=True))
         session.commit()
@@ -318,7 +343,7 @@ def create_transaction(tx: Transaction, session: Session = Depends(get_session))
         "alerts": alerts
     }
 
-class UpdateTransactionRequest(BaseModel):
+class UpdateTransactionByUuidRequest(BaseModel):
     title: Optional[str] = None
     amount: Optional[float] = None
     merchant: Optional[str] = None
@@ -332,52 +357,41 @@ class UpdateTransactionRequest(BaseModel):
     notes: Optional[str] = None
     is_recurring: Optional[bool] = None
 
-@app.put("/api/transactions/{tx_id}")
-def update_transaction(
-    tx_id: int,
-    req: UpdateTransactionRequest,
+@api_router.put("/transactions/by-uuid/{uuid}")
+def update_transaction_by_uuid(
+    uuid: str,
+    req: UpdateTransactionByUuidRequest,
     session: Session = Depends(get_session)
 ):
-    tx = session.get(Transaction, tx_id)
+    tx = session.exec(select(Transaction).where(Transaction.uuid == uuid)).first()
     if not tx:
-        # Create if not found with this id
-        tx = Transaction(
-            id=tx_id,
-            title=req.title or "Transaction",
-            amount=req.amount or 0.0,
-            merchant=req.merchant or "Merchant",
-            category=req.category or "Other",
-            date=req.date or date.today().strftime("%Y-%m-%d"),
-            status=req.status or "confirmed",
-            notes=req.notes
-        )
-        session.add(tx)
-    else:
-        if req.title is not None: tx.title = req.title
-        if req.amount is not None: tx.amount = req.amount
-        if req.merchant is not None: tx.merchant = req.merchant
-        if req.raw_text is not None: tx.raw_text = req.raw_text
-        if req.category is not None: tx.category = req.category
-        if req.source is not None: tx.source = req.source
-        if req.type is not None: tx.type = req.type
-        if req.date is not None: tx.date = req.date
-        if req.confidence is not None: tx.confidence = req.confidence
-        if req.status is not None: tx.status = req.status
-        if req.notes is not None: tx.notes = req.notes
-        if req.is_recurring is not None: tx.is_recurring = req.is_recurring
-        session.add(tx)
+        raise HTTPException(status_code=404, detail="Transaction not found")
 
+    if req.title is not None: tx.title = req.title
+    if req.amount is not None: tx.amount = req.amount
+    if req.merchant is not None: tx.merchant = req.merchant
+    if req.raw_text is not None: tx.raw_text = req.raw_text
+    if req.category is not None: tx.category = req.category
+    if req.source is not None: tx.source = req.source
+    if req.type is not None: tx.type = req.type
+    if req.date is not None: tx.date = req.date
+    if req.confidence is not None: tx.confidence = req.confidence
+    if req.status is not None: tx.status = req.status
+    if req.notes is not None: tx.notes = req.notes
+    if req.is_recurring is not None: tx.is_recurring = req.is_recurring
+    
+    session.add(tx)
     session.commit()
     session.refresh(tx)
 
     # Learn merchant mapping if confirmed
     if tx.status == "confirmed" and tx.merchant:
         clean_key = tx.merchant.strip().lower()
-        existing = session.exec(select(MerchantDictionary).where(MerchantDictionary.merchant_key == clean_key)).first()
-        if existing:
-            existing.category = tx.category
-            existing.learned_from_user = True
-            session.add(existing)
+        dict_entry = session.exec(select(MerchantDictionary).where(MerchantDictionary.merchant_key == clean_key)).first()
+        if dict_entry:
+            dict_entry.category = tx.category
+            dict_entry.learned_from_user = True
+            session.add(dict_entry)
         else:
             session.add(MerchantDictionary(merchant_key=clean_key, category=tx.category, learned_from_user=True))
         session.commit()
@@ -390,19 +404,23 @@ def update_transaction(
         "alerts": alerts
     }
 
-@app.delete("/api/transactions/{tx_id}")
-def delete_transaction(tx_id: int, session: Session = Depends(get_session)):
-    tx = session.get(Transaction, tx_id)
+@api_router.delete("/transactions/{tx_id_or_uuid}")
+def delete_transaction(tx_id_or_uuid: str, session: Session = Depends(get_session)):
+    tx = None
+    if tx_id_or_uuid.isdigit():
+        tx = session.get(Transaction, int(tx_id_or_uuid))
+    if not tx:
+        tx = session.exec(select(Transaction).where(Transaction.uuid == tx_id_or_uuid)).first()
     if not tx:
         raise HTTPException(status_code=404, detail="Transaction not found")
             
     session.delete(tx)
     session.commit()
-    return {"message": "Transaction deleted", "id": tx_id}
+    return {"message": "Transaction deleted", "uuid": tx.uuid}
 
-# --- Monthly Budgets ---
+# --- Monthly Budgets & Rollover ---
 
-@app.get("/api/budgets", response_model=List[Budget])
+@api_router.get("/budgets")
 def list_budgets(
     period: Optional[str] = Query(None),
     session: Session = Depends(get_session)
@@ -410,22 +428,52 @@ def list_budgets(
     current_period = period or date.today().strftime("%Y-%m")
     budgets = session.exec(select(Budget).where(Budget.period == current_period)).all()
     
+    # Rollover: if no budgets exist for requested period, copy from latest period
     if not budgets:
-        # Fallback to all budgets or create for current period
-        budgets = session.exec(select(Budget)).all()
+        all_periods = session.exec(select(Budget.period).distinct()).all()
+        if all_periods:
+            latest_period = sorted([p for p in all_periods if p is not None])[-1]
+            latest_budgets = session.exec(select(Budget).where(Budget.period == latest_period)).all()
+            for lb in latest_budgets:
+                new_b = Budget(
+                    category=lb.category,
+                    allocated_amount=lb.allocated_amount,
+                    spent_amount=0.0,
+                    period=current_period
+                )
+                session.add(new_b)
+            session.commit()
+            budgets = session.exec(select(Budget).where(Budget.period == current_period)).all()
+        else:
+            default_categories = [
+                ("Food & Dining", 12000.0),
+                ("Housing", 18000.0),
+                ("Transportation", 4500.0),
+                ("Shopping", 5000.0),
+                ("Bills & Utilities", 3500.0),
+                ("Entertainment", 2000.0),
+                ("Healthcare", 2000.0),
+                ("Personal", 2000.0),
+            ]
+            for cat, amt in default_categories:
+                session.add(Budget(category=cat, allocated_amount=amt, spent_amount=0.0, period=current_period))
+            session.commit()
+            budgets = session.exec(select(Budget).where(Budget.period == current_period)).all()
         
     # Dynamically compute spent_amount from transactions in this period
     all_txs = session.exec(select(Transaction).where(Transaction.type == "expense")).all()
     
+    result = []
     for b in budgets:
         period_txs = [t for t in all_txs if t.category == b.category and t.date.startswith(b.period)]
         b.spent_amount = sum(t.amount for t in period_txs)
         session.add(b)
+        result.append(b.model_dump())
         
     session.commit()
-    return budgets
+    return result
 
-@app.post("/api/budgets", response_model=Budget)
+@api_router.post("/budgets")
 def create_or_update_budget(b: Budget, session: Session = Depends(get_session)):
     current_period = b.period or date.today().strftime("%Y-%m")
     existing = session.exec(
@@ -437,28 +485,28 @@ def create_or_update_budget(b: Budget, session: Session = Depends(get_session)):
         session.add(existing)
         session.commit()
         session.refresh(existing)
-        return existing
+        return existing.model_dump()
         
     b.period = current_period
     session.add(b)
     session.commit()
     session.refresh(b)
-    return b
+    return b.model_dump()
 
 # --- Savings Goals & checkGoalReallocation ---
 
-@app.get("/api/goals", response_model=List[SavingsGoal])
+@api_router.get("/goals")
 def list_goals(session: Session = Depends(get_session)):
-    return session.exec(select(SavingsGoal)).all()
+    return [g.model_dump() for g in session.exec(select(SavingsGoal)).all()]
 
-@app.post("/api/goals", response_model=SavingsGoal)
+@api_router.post("/goals")
 def create_goal(goal: SavingsGoal, session: Session = Depends(get_session)):
     session.add(goal)
     session.commit()
     session.refresh(goal)
-    return goal
+    return goal.model_dump()
 
-@app.get("/api/goals/reallocation-plan")
+@api_router.get("/goals/reallocation-plan")
 async def get_weekly_reallocation_plan(
     model: Optional[str] = Query(None),
     session: Session = Depends(get_session)
@@ -471,7 +519,7 @@ class ConfirmReallocationRequest(BaseModel):
     addition_amount: float
     category_adjustments: Dict[str, float]
 
-@app.post("/api/goals/reallocation-plan/confirm")
+@api_router.post("/goals/reallocation-plan/confirm")
 def confirm_reallocation(
     req: ConfirmReallocationRequest,
     session: Session = Depends(get_session)
@@ -483,7 +531,6 @@ def confirm_reallocation(
     goal.current_progress += req.addition_amount
     session.add(goal)
 
-    # Record GoalContribution row
     contribution = GoalContribution(
         goal_id=goal.id,
         amount=req.addition_amount,
@@ -515,7 +562,7 @@ def confirm_reallocation(
 
 # --- Analytics Dashboard (Computed from Real Data) ---
 
-@app.get("/api/analytics")
+@api_router.get("/analytics")
 def get_analytics(session: Session = Depends(get_session)):
     transactions = session.exec(select(Transaction)).all()
     budgets = session.exec(select(Budget)).all()
@@ -531,7 +578,6 @@ def get_analytics(session: Session = Depends(get_session)):
         if t.type == "expense":
             category_spend[t.category] = category_spend.get(t.category, 0.0) + t.amount
             
-    # 50/30/20 Rule based on Real Data
     needs_categories = {"Housing", "Bills & Utilities", "Food & Dining", "Groceries", "Healthcare", "Transportation"}
     needs_spent = sum(amt for cat, amt in category_spend.items() if cat in needs_categories)
     wants_spent = sum(amt for cat, amt in category_spend.items() if cat not in needs_categories)
@@ -576,7 +622,7 @@ class AgentChatRequest(BaseModel):
     message: str
     model: Optional[str] = None
 
-@app.post("/api/agent/chat")
+@api_router.post("/agent/chat")
 async def chat_with_agent(req: AgentChatRequest, session: Session = Depends(get_session)):
     transactions = session.exec(select(Transaction).limit(25)).all()
     budgets = session.exec(select(Budget)).all()
@@ -601,6 +647,10 @@ async def chat_with_agent(req: AgentChatRequest, session: Session = Depends(get_
     result = await agent_obj.execute(req.message, context=financial_context, model=req.model)
     return result
 
+# Mount the protected /api router
+app.include_router(api_router, prefix="/api")
+
+# Note: Default uvicorn host is 127.0.0.1. Change to 0.0.0.0 or LAN IP only when testing on a physical mobile device.
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

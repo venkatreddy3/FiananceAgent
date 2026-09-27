@@ -82,6 +82,7 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
 
     final updatedTx = TransactionModel(
       id: tx?.id,
+      uuid: tx?.uuid,
       title: tx?.title.isNotEmpty == true ? tx!.title : merchant,
       amount: amount,
       merchant: merchant,
@@ -100,7 +101,7 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
 
     // 2. If existing transaction, UPDATE it; otherwise add it
     TransactionModel finalTx;
-    if (tx != null && tx.id != null) {
+    if (tx != null) {
       finalTx = await ApiService().updateTransaction(updatedTx, previousCategory: tx.category);
     } else {
       finalTx = await ApiService().addTransaction(updatedTx);
@@ -124,6 +125,7 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
 
     final skippedTx = TransactionModel(
       id: tx?.id,
+      uuid: tx?.uuid,
       title: tx?.title.isNotEmpty == true ? tx!.title : merchant,
       amount: amount,
       merchant: merchant,
@@ -138,7 +140,7 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
     );
 
     TransactionModel finalTx;
-    if (tx != null && tx.id != null) {
+    if (tx != null) {
       finalTx = await ApiService().updateTransaction(skippedTx);
     } else {
       finalTx = await ApiService().addTransaction(skippedTx);
