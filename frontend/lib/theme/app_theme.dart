@@ -1,96 +1,99 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Brand Palette
-  static const Color background = Color(0xFF0B0F19);
+  // Pale Blue-Grey & Dark Glass Canvas
+  static const Color backgroundStart = Color(0xFF0B1120);
+  static const Color backgroundMid = Color(0xFF0F172A);
+  static const Color backgroundEnd = Color(0xFF192238);
+
+  // Soft Glassmorphic Surface Colors
+  static const Color glassSurface = Color(0x1AFFFFFF); // 10% white frosted
+  static const Color glassSurfaceElevated = Color(0x28FFFFFF); // 16% white frosted
+  static const Color glassBorder = Color(0x2EFFFFFF); // 18% white border
+
+  // Surface aliases for backward compatibility
   static const Color surface = Color(0xFF131B2E);
   static const Color surfaceElevated = Color(0xFF1B243B);
-  static const Color surfaceBorder = Color(0xFF23304E);
+  static const Color surfaceBorder = glassBorder;
 
-  // Financial Accents
-  static const Color emeraldPrimary = Color(0xFF10B981); // Income, Success, Savings
-  static const Color indigoAccent = Color(0xFF6366F1); // Agent, Intelligence
-  static const Color amberWarning = Color(0xFFF59E0B); // Budget Warning, Needs Attention
-  static const Color roseDanger = Color(0xFFF43F5E); // Overrun, Discretionary Spikes
-  static const Color cyanTech = Color(0xFF06B6D4); // Ollama, Automation
-  static const Color purpleAgent = Color(0xFF8B5CF6); // Strategist, Goal
+  // Core Muted Teal & Soft Lavender Palette
+  static const Color tealPrimary = Color(0xFF14B8A6); // Muted Teal
+  static const Color tealLight = Color(0xFF2DD4BF);
+  static const Color tealDark = Color(0xFF0D9488);
 
-  // Text Colors
+  static const Color lavenderAccent = Color(0xFFA78BFA); // Soft Lavender
+  static const Color lavenderDeep = Color(0xFF8B5CF6);
+  static const Color lavenderLight = Color(0xFFC4B5FD);
+
+  // Financial Accents & Aliases
+  static const Color emeraldPrimary = tealPrimary;
+  static const Color indigoAccent = lavenderAccent;
+  static const Color purpleAgent = lavenderDeep;
+  static const Color cyanTech = tealLight;
+  static const Color amberWarning = Color(0xFFFBBF24);
+  static const Color roseDanger = Color(0xFFF43F5E);
+
+  // Typography Colors
   static const Color textPrimary = Color(0xFFF8FAFC);
-  static const Color textSecondary = Color(0xFF94A3B8);
-  static const Color textMuted = Color(0xFF64748B);
+  static const Color textSecondary = Color(0xFFCBD5E1);
+  static const Color textMuted = Color(0xFF94A3B8);
 
-  static ThemeData get darkTheme {
+  static LinearGradient get backgroundGradient => const LinearGradient(
+        colors: [backgroundStart, backgroundMid, backgroundEnd],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
+
+  static ThemeData get softGlassTheme {
     return ThemeData(
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: background,
-      primaryColor: indigoAccent,
+      scaffoldBackgroundColor: Colors.transparent,
+      primaryColor: tealPrimary,
       colorScheme: const ColorScheme.dark(
-        primary: indigoAccent,
-        secondary: emeraldPrimary,
+        primary: tealPrimary,
+        secondary: lavenderAccent,
         surface: surface,
         error: roseDanger,
       ),
-      fontFamily: 'Roboto',
+      fontFamily: 'Outfit',
       appBarTheme: const AppBarTheme(
-        backgroundColor: background,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
         titleTextStyle: TextStyle(
           color: textPrimary,
-          fontSize: 20,
+          fontSize: 22,
           fontWeight: FontWeight.w700,
           letterSpacing: -0.5,
         ),
         iconTheme: IconThemeData(color: textPrimary),
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: surface,
-        selectedItemColor: emeraldPrimary,
-        unselectedItemColor: textMuted,
-        type: BottomNavigationBarType.fixed,
-        elevation: 8,
-      ),
-      cardTheme: CardThemeData(
-        color: surface,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: surfaceBorder, width: 1),
-        ),
-      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: emeraldPrimary,
-          foregroundColor: const Color(0xFF022C22),
+          backgroundColor: tealPrimary,
+          foregroundColor: const Color(0xFF042F2E),
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          textStyle: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 15,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: surfaceElevated,
+        fillColor: glassSurface,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: surfaceBorder),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: glassBorder),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: surfaceBorder),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: glassBorder),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: indigoAccent, width: 1.5),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: tealPrimary, width: 1.5),
         ),
         hintStyle: const TextStyle(color: textMuted, fontSize: 14),
-        labelStyle: const TextStyle(color: textSecondary),
       ),
     );
   }
