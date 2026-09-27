@@ -70,19 +70,19 @@ class _BudgetScreenState extends State<BudgetScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF131B2E),
+        backgroundColor: const Color(0xFFF0F5F8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
           side: const BorderSide(color: AppTheme.glassBorder),
         ),
-        title: const Text("Set Total Monthly Cap", style: TextStyle(fontWeight: FontWeight.w700)),
+        title: const Text("Set Total Monthly Cap", style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
         content: TextField(
           controller: capController,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(labelText: "Monthly Cap (₹)", prefixText: "₹ "),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel", style: TextStyle(color: AppTheme.textMuted))),
           ElevatedButton(
             onPressed: () {
               final val = double.tryParse(capController.text.trim()) ?? _monthlyCap;

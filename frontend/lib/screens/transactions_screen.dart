@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../services/transaction_capture_service.dart';
+import '../widgets/glass_card.dart';
 
 class TransactionsScreen extends StatefulWidget {
   const TransactionsScreen({super.key});
@@ -23,19 +26,28 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     "Transportation",
     "Bills & Utilities",
     "Entertainment",
+    "Healthcare",
     "Housing",
+    "Personal",
     "Income",
     "P2P Transfer",
+    "Uncategorized",
   ];
+
+  StreamSubscription? _captureSub;
 
   @override
   void initState() {
     super.initState();
     _loadTransactions();
+    _captureSub = TransactionCaptureService().onTransactionCaptured.listen((_) {
+      if (mounted) _loadTransactions();
+    });
   }
 
   @override
   void dispose() {
+    _captureSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -62,12 +74,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: AppTheme.surface,
+          backgroundColor: const Color(0xFFF0F5F8),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: AppTheme.surfaceBorder),
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: AppTheme.glassBorder),
           ),
-          title: const Text("Add Transaction", style: TextStyle(fontWeight: FontWeight.w700)),
+          title: const Text("Add Transaction", style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -79,7 +91,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         label: const Text("Expense"),
                         selected: type == "expense",
                         onSelected: (s) => setDialogState(() => type = "expense"),
-                        selectedColor: AppTheme.roseDanger.withOpacity(0.2),
+                        selectedColor: AppTheme.roseDanger.withValues(alpha: 0.2),
                         labelStyle: TextStyle(
                           color: type == "expense" ? AppTheme.roseDanger : AppTheme.textPrimary,
                           fontWeight: FontWeight.w700,
@@ -92,9 +104,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         label: const Text("Income"),
                         selected: type == "income",
                         onSelected: (s) => setDialogState(() => type = "income"),
-                        selectedColor: AppTheme.emeraldPrimary.withOpacity(0.2),
+                        selectedColor: AppTheme.tealPrimary.withValues(alpha: 0.2),
                         labelStyle: TextStyle(
-                          color: type == "income" ? AppTheme.emeraldPrimary : AppTheme.textPrimary,
+                          color: type == "income" ? AppTheme.tealPrimary : AppTheme.textPrimary,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -119,11 +131,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: category,
-                  dropdownColor: AppTheme.surfaceElevated,
+                  initialValue: category,
+                  dropdownColor: const Color(0xFFF0F5F8),
                   decoration: const InputDecoration(labelText: "Category"),
                   items: _categories.where((c) => c != "All").map((c) {
-                    return DropdownMenuItem(value: c, child: Text(c));
+                    return DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(color: AppTheme.textPrimary)));
                   }).toList(),
                   onChanged: (val) => setDialogState(() => category = val ?? "Food & Dining"),
                 ),
@@ -136,7 +148,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               child: const Text("Cancel", style: TextStyle(color: AppTheme.textMuted)),
             ),
             ElevatedButton(
-              onPressed: () async {
+              onPressed: () {
                 final title = titleController.text.trim();
                 final amount = double.tryParse(amountController.text.trim()) ?? 0.0;
                 final merchant = merchantController.text.trim().isNotEmpty ? merchantController.text.trim() : title;
@@ -171,7 +183,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: AppTheme.emeraldPrimary)),
+        backgroundColor: Colors.transparent,
+        body: Center(child: CircularProgressIndicator(color: AppTheme.tealPrimary)),
       );
     }
 
@@ -185,195 +198,194 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       return matchesCat && matchesSearch;
     }).toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Transactions Ledger"),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add, color: AppTheme.emeraldPrimary),
-            tooltip: "Manual Entry",
-            onPressed: _showAddTransactionDialog,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                hintText: "Search transactions, merchants, or notes...",
-                prefixIcon: const Icon(Icons.search, color: AppTheme.textMuted),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, color: AppTheme.textMuted),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {});
-                        },
-                      )
-                    : null,
+    return Container(
+      decoration: BoxDecoration(gradient: AppTheme.backgroundGradient),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: const Text("Transactions Ledger"),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add, color: AppTheme.tealPrimary),
+              tooltip: "Manual Entry",
+              onPressed: _showAddTransactionDialog,
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            // Search Bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  hintText: "Search transactions, merchants...",
+                  prefixIcon: const Icon(Icons.search, color: AppTheme.textMuted),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, color: AppTheme.textMuted),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {});
+                          },
+                        )
+                      : null,
+                ),
               ),
             ),
-          ),
 
-          // Category Filter Chips
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: _categories.map((cat) {
-                final isSelected = _selectedCategory == cat;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: ChoiceChip(
-                    label: Text(cat),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      if (selected) setState(() => _selectedCategory = cat);
-                    },
-                    selectedColor: AppTheme.indigoAccent,
-                    backgroundColor: AppTheme.surface,
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : AppTheme.textSecondary,
-                      fontSize: 12,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(
-                        color: isSelected ? AppTheme.indigoAccent : AppTheme.surfaceBorder,
+            // Category Filter Chips
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Row(
+                children: _categories.map((cat) {
+                  final isSelected = _selectedCategory == cat;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: ChoiceChip(
+                      label: Text(cat),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        if (selected) setState(() => _selectedCategory = cat);
+                      },
+                      selectedColor: AppTheme.tealPrimary,
+                      backgroundColor: AppTheme.glassSurface,
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.white : AppTheme.textSecondary,
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: isSelected ? AppTheme.tealPrimary : AppTheme.glassBorder,
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }).toList(),
+                  );
+                }).toList(),
+              ),
             ),
-          ),
 
-          const SizedBox(height: 8),
+            const SizedBox(height: 6),
 
-          // Transaction List
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _loadTransactions,
-              color: AppTheme.emeraldPrimary,
-              child: filtered.isEmpty
-                  ? const Center(
-                      child: Text(
-                        "No transactions found",
-                        style: TextStyle(color: AppTheme.textMuted),
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      itemCount: filtered.length,
-                      itemBuilder: (ctx, index) {
-                        final tx = filtered[index];
-                        final isExpense = tx.type == "expense";
+            // Transaction List
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _loadTransactions,
+                color: AppTheme.tealPrimary,
+                child: filtered.isEmpty
+                    ? const Center(
+                        child: Text(
+                          "No transactions found",
+                          style: TextStyle(color: AppTheme.textMuted),
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        itemCount: filtered.length,
+                        itemBuilder: (ctx, index) {
+                          final tx = filtered[index];
+                          final isExpense = tx.type == "expense";
 
-                        return Dismissible(
-                          key: Key("${tx.id ?? index}"),
-                          direction: DismissDirection.endToStart,
-                          background: Container(
-                            alignment: Alignment.centerRight,
-                            padding: const EdgeInsets.only(right: 20),
-                            decoration: BoxDecoration(
-                              color: AppTheme.roseDanger.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
+                          return Dismissible(
+                            key: Key("${tx.id ?? index}"),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20),
+                              decoration: BoxDecoration(
+                                color: AppTheme.roseDanger.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Icon(Icons.delete, color: AppTheme.roseDanger),
                             ),
-                            child: const Icon(Icons.delete, color: AppTheme.roseDanger),
-                          ),
-                          onDismissed: (_) {
-                            if (tx.id != null) ApiService().deleteTransaction(tx.id!);
-                            _transactions.remove(tx);
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppTheme.surface,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppTheme.surfaceBorder),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: isExpense
-                                        ? AppTheme.surfaceElevated
-                                        : AppTheme.emeraldPrimary.withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(10),
+                            onDismissed: (_) {
+                              if (tx.id != null) ApiService().deleteTransaction(tx.id!);
+                              _transactions.remove(tx);
+                            },
+                            child: GlassCard(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: isExpense
+                                          ? AppTheme.lavenderAccent.withValues(alpha: 0.15)
+                                          : AppTheme.tealPrimary.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Icon(
+                                      isExpense ? Icons.receipt_long_outlined : Icons.payments_outlined,
+                                      color: isExpense ? AppTheme.lavenderDeep : AppTheme.tealPrimary,
+                                      size: 20,
+                                    ),
                                   ),
-                                  child: Icon(
-                                    isExpense ? Icons.receipt_long_outlined : Icons.payments_outlined,
-                                    color: isExpense ? AppTheme.indigoAccent : AppTheme.emeraldPrimary,
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        tx.title,
-                                        style: const TextStyle(
-                                          color: AppTheme.textPrimary,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 3),
-                                      Row(
-                                        children: [
-                                          Text(
-                                            "${tx.date} • ${tx.category}",
-                                            style: const TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          tx.title,
+                                          style: const TextStyle(
+                                            color: AppTheme.textPrimary,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 14.5,
                                           ),
-                                          const SizedBox(width: 6),
-                                          if (tx.source == "sms" || tx.source == "notification")
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                              decoration: BoxDecoration(
-                                                color: AppTheme.cyanTech.withOpacity(0.15),
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                tx.source.toUpperCase(),
-                                                style: const TextStyle(
-                                                  color: AppTheme.cyanTech,
-                                                  fontSize: 9,
-                                                  fontWeight: FontWeight.w700,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Row(
+                                          children: [
+                                            Text(
+                                              "${tx.date} • ${tx.category}",
+                                              style: const TextStyle(color: AppTheme.textMuted, fontSize: 11.5),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            if (tx.source == "sms" || tx.source == "notification")
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                decoration: BoxDecoration(
+                                                  color: AppTheme.tealPrimary.withValues(alpha: 0.15),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  tx.source.toUpperCase(),
+                                                  style: const TextStyle(
+                                                    color: AppTheme.tealPrimary,
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
                                                 ),
                                               ),
-                                            ),
-                                        ],
-                                      ),
-                                    ],
+                                          ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  "${isExpense ? '-' : '+'}₹${tx.amount.toStringAsFixed(0)}",
-                                  style: TextStyle(
-                                    color: isExpense ? AppTheme.textPrimary : AppTheme.emeraldPrimary,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 14.5,
+                                  Text(
+                                    "${isExpense ? '-' : '+'}₹${tx.amount.toStringAsFixed(0)}",
+                                    style: TextStyle(
+                                      color: isExpense ? AppTheme.textPrimary : AppTheme.tealPrimary,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 15,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
+                          );
+                        },
+                      ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

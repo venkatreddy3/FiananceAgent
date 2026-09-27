@@ -40,7 +40,7 @@ class TransactionCaptureService {
         }
       },
       onError: (err) {
-        // Native channel error or simulator mode
+        // Native channel error / simulator mode
       },
     );
   }
@@ -72,7 +72,7 @@ class TransactionCaptureService {
   }) async {
     final now = timestamp ?? DateTime.now().millisecondsSinceEpoch;
 
-    // 1. Skip non-financial, OTPs, incoming money, or failed transactions
+    // 1. Skip non-financial, OTPs, or failed transactions
     if (_shouldSkipEvent(rawText)) {
       return null;
     }
@@ -87,11 +87,15 @@ class TransactionCaptureService {
     final String merchant = parsed['merchant'];
     final bool isP2P = parsed['isP2P'];
 
-    // 3. Deduplication: treat two events with same amount within 3 minutes as duplicate
-    if (_isDuplicate(amount, now)) {
+    // 3. Deduplication by (amount + merchant + source-agnostic 3-min window)
+    if (_isDuplicate(amount, merchant, now)) {
       return null;
     }
-    _recentEventsForDeduplication.add({'amount': amount, 'time': now});
+    _recentEventsForDeduplication.add({
+      'amount': amount,
+      'merchant': merchant.toLowerCase().trim(),
+      'time': now,
+    });
     _cleanOldDeduplicationBuffer(now);
 
     // 4. Categorize using 4-Method Cascade
@@ -106,6 +110,9 @@ class TransactionCaptureService {
     final double confidence = catResult['confidence'];
     final bool isUncategorized = category == "Uncategorized" || confidence < 0.85;
 
+    // Use original event capture timestamp for date
+    final dateStr = DateTime.fromMillisecondsSinceEpoch(now).toIso8601String().substring(0, 10);
+
     final tx = TransactionModel(
       title: merchant,
       amount: amount,
@@ -114,13 +121,13 @@ class TransactionCaptureService {
       category: category,
       source: isP2P ? "p2p" : source.toLowerCase(),
       type: "expense",
-      date: DateTime.now().toIso8601String().substring(0, 10),
+      date: dateStr,
       confidence: confidence,
       status: isUncategorized ? "skipped" : "auto",
       notes: isP2P ? "P2P Payment" : null,
     );
 
-    // Save locally & sync
+    // Save locally in Hive & sync
     await ApiService().addTransaction(tx);
     _capturedStreamController.add(tx);
 
@@ -140,8 +147,11 @@ class TransactionCaptureService {
       return true;
     }
 
-    // Incoming money / salary / credits (we focus expense tracking or handle separately)
-    if (lower.contains("credited to") || lower.contains("received rs") || lower.contains("cashback received") || lower.contains("refund of")) {
+    // Fix: Do NOT skip if message contains "debited". Only treat as income if it has credit verb AND no debit verb.
+    final hasDebit = lower.contains("debited") || lower.contains("paid") || lower.contains("spent") || lower.contains("sent") || lower.contains("txn of");
+    final hasCredit = lower.contains("credited") || lower.contains("received rs") || lower.contains("refund of");
+
+    if (hasCredit && !hasDebit) {
       return true;
     }
 
@@ -149,7 +159,7 @@ class TransactionCaptureService {
   }
 
   Map<String, dynamic>? _extractAmountAndMerchant(String text) {
-    // Amount Regex: matches ₹450, Rs. 1,200.50, INR 350
+    // Amount Regex: matches ₹450, Rs. 1,200.50, INR 350, Rs 500
     final amtRegex = RegExp(r'(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)', caseSensitive: false);
     final amtMatch = amtRegex.firstMatch(text);
     if (amtMatch == null) return null;
@@ -158,11 +168,10 @@ class TransactionCaptureService {
     final amount = double.tryParse(amountStr) ?? 0.0;
     if (amount <= 0) return null;
 
-    // Check P2P UPI patterns: "to Rahul", "sent to user@okaxis", "paid to 9876543210"
     bool isP2P = false;
     String merchant = "Unknown Merchant";
 
-    final p2pRegex = RegExp(r"""(?:paid to|sent to|transfer to|to)\s+([A-Za-z0-9\s@\._\-]+?)(?:\s+(?:on|ref|upi|using|from|via|\.)|$)""", caseSensitive: false);
+    final p2pRegex = RegExp(r"""(?:paid to|sent to|transfer to|trf to|credited to|to)\s+([A-Za-z0-9\s@\._\-]+?)(?:\s+(?:on|ref|upi|using|from|via|\.)|$)""", caseSensitive: false);
     final merchantRegex = RegExp(r"""(?:at|spent on|towards|info\s*:\s*)\s+([A-Za-z0-9\s&\.\'\-]+?)(?:\s+(?:on|ref|avl|bal|using|from|via|\.)|$)""", caseSensitive: false);
     final vpaRegex = RegExp(r"""([a-zA-Z0-9\.\-_]+@(okaxis|okhdfcbank|okicici|oksbi|paytm|ybl|axl|ibl|upi))""", caseSensitive: false);
     final phoneRegex = RegExp(r"""\b(?:[6-9]\d{9})\b""");
@@ -192,10 +201,14 @@ class TransactionCaptureService {
     };
   }
 
-  bool _isDuplicate(double amount, int timestamp) {
+  bool _isDuplicate(double amount, String merchant, int timestamp) {
     const int threeMinutesMs = 3 * 60 * 1000;
+    final cleanMerchant = merchant.toLowerCase().trim();
     for (var event in _recentEventsForDeduplication) {
-      if (event['amount'] == amount && (timestamp - (event['time'] as int)).abs() <= threeMinutesMs) {
+      final isSameAmount = event['amount'] == amount;
+      final isSameMerchant = event['merchant'] == cleanMerchant;
+      final isWithinWindow = (timestamp - (event['time'] as int)).abs() <= threeMinutesMs;
+      if (isSameAmount && isSameMerchant && isWithinWindow) {
         return true;
       }
     }

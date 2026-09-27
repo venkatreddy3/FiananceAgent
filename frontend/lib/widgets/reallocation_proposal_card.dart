@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
+import 'glass_card.dart';
 
 class ReallocationProposalCard extends StatefulWidget {
   final Map<String, dynamic> planData;
@@ -37,15 +38,15 @@ class _ReallocationProposalCardState extends State<ReallocationProposalCard> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppTheme.emeraldPrimary,
+          backgroundColor: AppTheme.tealPrimary,
           content: Row(
             children: [
-              const Icon(Icons.check_circle_outline, color: Color(0xFF022C22), size: 20),
+              const Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   "Virtual reallocation applied! ₹${addition.toStringAsFixed(0)} added to ${primary['goal_title']}.",
-                  style: const TextStyle(color: Color(0xFF022C22), fontWeight: FontWeight.w700),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                 ),
               ),
             ],
@@ -67,21 +68,10 @@ class _ReallocationProposalCardState extends State<ReallocationProposalCard> {
     final String agentMsg = widget.planData["agent_message"] ?? "";
     final Map<String, dynamic> adjustments = Map<String, dynamic>.from(primary["category_adjustments"] ?? {});
 
-    return Container(
+    return GlassCard(
       margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.indigoAccent.withOpacity(0.15),
-            AppTheme.purpleAgent.withOpacity(0.08),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.indigoAccent.withOpacity(0.4), width: 1.2),
-      ),
+      padding: const EdgeInsets.all(18),
+      borderColor: AppTheme.lavenderAccent.withValues(alpha: 0.6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -90,7 +80,7 @@ class _ReallocationProposalCardState extends State<ReallocationProposalCard> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: AppTheme.indigoAccent,
+                  color: AppTheme.lavenderDeep,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(Icons.auto_awesome, color: Colors.white, size: 16),
@@ -99,21 +89,21 @@ class _ReallocationProposalCardState extends State<ReallocationProposalCard> {
               const Text(
                 "Autonomous Weekly Re-Planner",
                 style: TextStyle(
-                  color: AppTheme.indigoAccent,
+                  color: AppTheme.lavenderDeep,
                   fontSize: 13,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: AppTheme.emeraldPrimary.withOpacity(0.2),
+                  color: AppTheme.tealPrimary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Text(
                   "Slack Detected",
-                  style: TextStyle(color: AppTheme.emeraldPrimary, fontSize: 11, fontWeight: FontWeight.w700),
+                  style: TextStyle(color: AppTheme.tealPrimary, fontSize: 11, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -124,7 +114,7 @@ class _ReallocationProposalCardState extends State<ReallocationProposalCard> {
             style: const TextStyle(
               color: AppTheme.textPrimary,
               fontSize: 13.5,
-              height: 1.4,
+              height: 1.45,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -139,26 +129,26 @@ class _ReallocationProposalCardState extends State<ReallocationProposalCard> {
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppTheme.surfaceElevated,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: AppTheme.surfaceBorder),
+                    color: AppTheme.glassSurface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.glassBorder),
                   ),
                   child: Text(
                     "${e.key}: ₹${e.value.toStringAsFixed(0)}",
-                    style: const TextStyle(color: AppTheme.roseDanger, fontSize: 11, fontWeight: FontWeight.w600),
+                    style: const TextStyle(color: AppTheme.roseDanger, fontSize: 11, fontWeight: FontWeight.w700),
                   ),
                 );
               }),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppTheme.emeraldPrimary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppTheme.emeraldPrimary.withOpacity(0.4)),
+                  color: AppTheme.tealPrimary.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.tealPrimary.withValues(alpha: 0.3)),
                 ),
                 child: Text(
                   "$goalTitle: +₹${addition.toStringAsFixed(0)}",
-                  style: const TextStyle(color: AppTheme.emeraldPrimary, fontSize: 11, fontWeight: FontWeight.w700),
+                  style: const TextStyle(color: AppTheme.tealPrimary, fontSize: 11, fontWeight: FontWeight.w800),
                 ),
               ),
             ],
@@ -172,21 +162,22 @@ class _ReallocationProposalCardState extends State<ReallocationProposalCard> {
               const Expanded(
                 child: Text(
                   "🔒 Virtual in-app budget adjustment only. No real money moved.",
-                  style: TextStyle(color: AppTheme.textMuted, fontSize: 10.5),
+                  style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
                 ),
               ),
               const SizedBox(width: 8),
               ElevatedButton(
                 onPressed: _isConfirming ? null : _applyReallocation,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.emeraldPrimary,
+                  backgroundColor: AppTheme.tealPrimary,
+                  foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 ),
                 child: _isConfirming
                     ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Text(
                         "1-Tap Apply",
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF022C22)),
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
                       ),
               ),
             ],

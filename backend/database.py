@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from sqlmodel import Field, SQLModel, create_engine, Session, select
@@ -9,7 +10,7 @@ class Transaction(SQLModel, table=True):
     amount: float
     merchant: str
     raw_text: Optional[str] = None
-    category: str # "Food & Dining", "Shopping", "Transportation", "Bills & Utilities", "Entertainment", "Healthcare", "Housing", "Income", "P2P Transfer", "Other"
+    category: str # "Food & Dining", "Shopping", "Transportation", "Bills & Utilities", "Entertainment", "Healthcare", "Housing", "Personal", "Income", "P2P Transfer", "Uncategorized"
     source: str = "merchant" # "merchant", "p2p", "sms", "notification", "manual"
     type: str = "expense" # "expense" or "income"
     date: str # YYYY-MM-DD
@@ -46,6 +47,15 @@ class SavingsGoal(SQLModel, table=True):
     monthly_target: float = 0.0
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+class GoalContribution(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    goal_id: int = Field(index=True)
+    amount: float
+    date: str # YYYY-MM-DD
+    source: str = "reallocation" # "reallocation", "manual", "auto"
+    notes: Optional[str] = "virtual reallocation - no money is moved"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
 class GoalMonthlyPlan(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     goal_id: int
@@ -75,9 +85,11 @@ def init_db():
         if not existing_dict:
             seed_merchant_dictionary(session)
             
-        existing_tx = session.exec(select(Transaction)).first()
-        if not existing_tx:
-            seed_data(session)
+        # Only seed demo data if explicit env flag SEED_DEMO_DATA is true
+        if os.environ.get("SEED_DEMO_DATA", "").lower() in ("1", "true", "yes"):
+            existing_tx = session.exec(select(Transaction)).first()
+            if not existing_tx:
+                seed_data(session)
 
 def seed_merchant_dictionary(session: Session):
     """Seed comprehensive dictionary of popular Indian & Global merchants"""
@@ -151,28 +163,29 @@ def seed_merchant_dictionary(session: Session):
 
 def seed_data(session: Session):
     today = date.today().strftime("%Y-%m-%d")
+    current_month = date.today().strftime("%Y-%m")
     sample_transactions = [
-        Transaction(title="Monthly Salary", amount=65000.00, merchant="Acme Corp", category="Income", type="income", date="2026-09-01", confidence=1.0, status="confirmed", source="manual"),
-        Transaction(title="Apartment Rent", amount=18000.00, merchant="Downtown Realty", category="Housing", type="expense", date="2026-09-02", is_recurring=True, confidence=1.0, status="confirmed", source="notification"),
-        Transaction(title="Electricity & Water", amount=2450.00, merchant="BESCOM", category="Bills & Utilities", type="expense", date="2026-09-05", confidence=1.0, status="auto", source="sms"),
-        Transaction(title="Blinkit Quick Grocery", amount=1240.00, merchant="Blinkit", category="Food & Dining", type="expense", date="2026-09-08", confidence=1.0, status="auto", source="notification"),
-        Transaction(title="Uber Commute to Office", amount=420.00, merchant="Uber", category="Transportation", type="expense", date="2026-09-10", confidence=1.0, status="auto", source="notification"),
-        Transaction(title="Netflix & Spotify Subscriptions", amount=999.00, merchant="Netflix", category="Entertainment", type="expense", date="2026-09-12", is_recurring=True, confidence=1.0, status="auto", source="sms"),
-        Transaction(title="Swiggy Dinner Delivery", amount=580.00, merchant="Swiggy", category="Food & Dining", type="expense", date="2026-09-15", confidence=1.0, status="auto", source="notification"),
-        Transaction(title="Freelance Design Project", amount=15000.00, merchant="Client Upwork", category="Income", type="income", date="2026-09-16", confidence=1.0, status="confirmed", source="manual"),
-        Transaction(title="Nike Running Shoes", amount=6499.00, merchant="Nike", category="Shopping", type="expense", date="2026-09-18", confidence=1.0, status="confirmed", source="notification", ai_flagged=True, ai_flag_reason="Discretionary spike in Shopping category"),
-        Transaction(title="HP Petrol Station", amount=1500.00, merchant="HP Petrol", category="Transportation", type="expense", date="2026-09-20", confidence=1.0, status="auto", source="sms"),
-        Transaction(title="Zomato Weekend Lunch", amount=890.00, merchant="Zomato", category="Food & Dining", type="expense", date="2026-09-22", confidence=1.0, status="auto", source="notification"),
-        Transaction(title="UPI Transfer to Rahul", amount=1200.00, merchant="Rahul Sharma (9876543210)", category="P2P Transfer", type="expense", date=today, confidence=0.45, status="confirmed", source="notification", notes="Weekend Trip Split"),
+        Transaction(title="Monthly Salary", amount=65000.00, merchant="Acme Corp", category="Income", type="income", date=f"{current_month}-01", confidence=1.0, status="confirmed", source="manual"),
+        Transaction(title="Apartment Rent", amount=18000.00, merchant="Downtown Realty", category="Housing", type="expense", date=f"{current_month}-02", is_recurring=True, confidence=1.0, status="confirmed", source="notification"),
+        Transaction(title="Electricity & Water", amount=2450.00, merchant="BESCOM", category="Bills & Utilities", type="expense", date=f"{current_month}-05", confidence=1.0, status="auto", source="sms"),
+        Transaction(title="Blinkit Quick Grocery", amount=1240.00, merchant="Blinkit", category="Food & Dining", type="expense", date=f"{current_month}-08", confidence=1.0, status="auto", source="notification"),
+        Transaction(title="Uber Commute to Office", amount=420.00, merchant="Uber", category="Transportation", type="expense", date=f"{current_month}-10", confidence=1.0, status="auto", source="notification"),
+        Transaction(title="Netflix & Spotify Subscriptions", amount=999.00, merchant="Netflix", category="Entertainment", type="expense", date=f"{current_month}-12", is_recurring=True, confidence=1.0, status="auto", source="sms"),
+        Transaction(title="Swiggy Dinner Delivery", amount=580.00, merchant="Swiggy", category="Food & Dining", type="expense", date=f"{current_month}-15", confidence=1.0, status="auto", source="notification"),
+        Transaction(title="Freelance Design Project", amount=15000.00, merchant="Client Upwork", category="Income", type="income", date=f"{current_month}-16", confidence=1.0, status="confirmed", source="manual"),
+        Transaction(title="Nike Running Shoes", amount=6499.00, merchant="Nike", category="Shopping", type="expense", date=f"{current_month}-18", confidence=1.0, status="confirmed", source="notification", ai_flagged=True, ai_flag_reason="Discretionary spike in Shopping category"),
+        Transaction(title="HP Petrol Station", amount=1500.00, merchant="HP Petrol", category="Transportation", type="expense", date=f"{current_month}-20", confidence=1.0, status="auto", source="sms"),
+        Transaction(title="Zomato Weekend Lunch", amount=890.00, merchant="Zomato", category="Food & Dining", type="expense", date=f"{current_month}-22", confidence=1.0, status="auto", source="notification"),
+        Transaction(title="UPI Transfer to Rahul", amount=1200.00, merchant="Rahul Sharma", category="P2P Transfer", type="expense", date=today, confidence=0.45, status="confirmed", source="notification", notes="Weekend Trip Split"),
     ]
     
     sample_budgets = [
-        Budget(category="Food & Dining", allocated_amount=12000.00, spent_amount=2710.00, period="2026-09"),
-        Budget(category="Housing", allocated_amount=18000.00, spent_amount=18000.00, period="2026-09"),
-        Budget(category="Transportation", allocated_amount=4500.00, spent_amount=1920.00, period="2026-09"),
-        Budget(category="Shopping", allocated_amount=8000.00, spent_amount=6499.00, period="2026-09"),
-        Budget(category="Entertainment", allocated_amount=3000.00, spent_amount=999.00, period="2026-09"),
-        Budget(category="Bills & Utilities", allocated_amount=3500.00, spent_amount=2450.00, period="2026-09"),
+        Budget(category="Food & Dining", allocated_amount=12000.00, spent_amount=2710.00, period=current_month),
+        Budget(category="Housing", allocated_amount=18000.00, spent_amount=18000.00, period=current_month),
+        Budget(category="Transportation", allocated_amount=4500.00, spent_amount=1920.00, period=current_month),
+        Budget(category="Shopping", allocated_amount=8000.00, spent_amount=6499.00, period=current_month),
+        Budget(category="Entertainment", allocated_amount=3000.00, spent_amount=999.00, period=current_month),
+        Budget(category="Bills & Utilities", allocated_amount=3500.00, spent_amount=2450.00, period=current_month),
     ]
     
     sample_goals = [

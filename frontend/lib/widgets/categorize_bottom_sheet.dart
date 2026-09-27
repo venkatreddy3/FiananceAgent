@@ -2,20 +2,24 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../services/categorization_service.dart';
 
 class CategorizeBottomSheet extends StatefulWidget {
-  final Map<String, dynamic> extractedData;
+  final TransactionModel? transaction;
+  final Map<String, dynamic>? extractedData;
   final Function(TransactionModel) onCategorized;
 
   const CategorizeBottomSheet({
     super.key,
-    required this.extractedData,
+    this.transaction,
+    this.extractedData,
     required this.onCategorized,
   });
 
   static Future<void> show(
     BuildContext context, {
-    required Map<String, dynamic> extractedData,
+    TransactionModel? transaction,
+    Map<String, dynamic>? extractedData,
     required Function(TransactionModel) onCategorized,
   }) {
     return showModalBottomSheet(
@@ -23,6 +27,7 @@ class CategorizeBottomSheet extends StatefulWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => CategorizeBottomSheet(
+        transaction: transaction,
         extractedData: extractedData,
         onCategorized: onCategorized,
       ),
@@ -40,7 +45,7 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
   String? _selectedP2PReason;
 
   final List<String> _p2pChips = ["Personal", "Friend", "Rent", "Gift", "Split", "Other"];
-  final List<String> _categories = [
+  static const List<String> _categories = [
     "Food & Dining",
     "Shopping",
     "Transportation",
@@ -48,8 +53,16 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
     "Entertainment",
     "Healthcare",
     "Housing",
-    "Other",
+    "Personal",
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.transaction != null && widget.transaction!.category != "Uncategorized") {
+      _selectedCategory = widget.transaction!.category;
+    }
+  }
 
   @override
   void dispose() {
@@ -58,74 +71,99 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
   }
 
   void _confirmSelection(String category, {String? note}) async {
-    final extracted = widget.extractedData;
-    final double amount = (extracted['amount'] as num?)?.toDouble() ?? 0.0;
-    final String merchant = extracted['merchant'] ?? 'Unknown Merchant';
-    final String rawText = extracted['raw_text'] ?? '';
-    final String source = extracted['is_p2p'] == true ? 'p2p' : 'notification';
+    final tx = widget.transaction;
+    final extracted = widget.extractedData ?? {};
 
-    final newTx = TransactionModel(
-      title: merchant,
+    final double amount = tx?.amount ?? (extracted['amount'] as num?)?.toDouble() ?? 0.0;
+    final String merchant = tx?.merchant ?? extracted['merchant'] ?? 'Unknown Merchant';
+    final String rawText = tx?.rawText ?? extracted['raw_text'] ?? '';
+    final String source = tx?.source ?? (extracted['is_p2p'] == true ? 'p2p' : 'notification');
+    final String date = tx?.date ?? DateTime.now().toIso8601String().substring(0, 10);
+
+    final updatedTx = TransactionModel(
+      id: tx?.id,
+      title: tx?.title.isNotEmpty == true ? tx!.title : merchant,
       amount: amount,
       merchant: merchant,
       rawText: rawText,
       category: category,
       source: source,
-      type: "expense",
-      date: DateTime.now().toIso8601String().substring(0, 10),
+      type: tx?.type ?? "expense",
+      date: date,
       confidence: 1.0,
       status: "confirmed",
-      notes: note,
+      notes: note ?? tx?.notes,
     );
 
-    // Save transaction via ApiService
-    await ApiService().addTransaction(newTx);
-    // Learn mapping in dictionary
-    await ApiService().learnMerchantMapping(merchant, category);
+    // 1. Learn merchant rule (saves locally + syncs to backend)
+    await CategorizationService().learnMerchant(merchant, category);
+
+    // 2. If existing transaction, UPDATE it; otherwise add it
+    TransactionModel finalTx;
+    if (tx != null && tx.id != null) {
+      finalTx = await ApiService().updateTransaction(updatedTx, previousCategory: tx.category);
+    } else {
+      finalTx = await ApiService().addTransaction(updatedTx);
+    }
 
     if (mounted) {
       Navigator.of(context).pop();
-      widget.onCategorized(newTx);
+      widget.onCategorized(finalTx);
     }
   }
 
-  void _skip() {
-    final extracted = widget.extractedData;
-    final double amount = (extracted['amount'] as num?)?.toDouble() ?? 0.0;
-    final String merchant = extracted['merchant'] ?? 'Unknown Merchant';
+  void _skip() async {
+    final tx = widget.transaction;
+    final extracted = widget.extractedData ?? {};
 
-    final newTx = TransactionModel(
-      title: merchant,
+    final double amount = tx?.amount ?? (extracted['amount'] as num?)?.toDouble() ?? 0.0;
+    final String merchant = tx?.merchant ?? extracted['merchant'] ?? 'Unknown Merchant';
+    final String rawText = tx?.rawText ?? extracted['raw_text'] ?? '';
+    final String source = tx?.source ?? 'notification';
+    final String date = tx?.date ?? DateTime.now().toIso8601String().substring(0, 10);
+
+    final skippedTx = TransactionModel(
+      id: tx?.id,
+      title: tx?.title.isNotEmpty == true ? tx!.title : merchant,
       amount: amount,
       merchant: merchant,
+      rawText: rawText,
       category: "Uncategorized",
-      source: "notification",
-      type: "expense",
-      date: DateTime.now().toIso8601String().substring(0, 10),
+      source: source,
+      type: tx?.type ?? "expense",
+      date: date,
       confidence: 0.0,
       status: "skipped",
+      notes: tx?.notes,
     );
 
-    ApiService().addTransaction(newTx);
-    Navigator.of(context).pop();
-    widget.onCategorized(newTx);
+    TransactionModel finalTx;
+    if (tx != null && tx.id != null) {
+      finalTx = await ApiService().updateTransaction(skippedTx);
+    } else {
+      finalTx = await ApiService().addTransaction(skippedTx);
+    }
+
+    if (mounted) {
+      Navigator.of(context).pop();
+      widget.onCategorized(finalTx);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final extracted = widget.extractedData;
-    final double amount = (extracted['amount'] as num?)?.toDouble() ?? 0.0;
-    final String merchant = extracted['merchant'] ?? 'Unknown Merchant';
-    final bool isP2P = extracted['is_p2p'] == true;
+    final tx = widget.transaction;
+    final extracted = widget.extractedData ?? {};
+    final double amount = tx?.amount ?? (extracted['amount'] as num?)?.toDouble() ?? 0.0;
+    final String merchant = tx?.merchant ?? extracted['merchant'] ?? 'Unknown Merchant';
+    final bool isP2P = tx?.source == 'p2p' || extracted['is_p2p'] == true;
 
     return Container(
       decoration: const BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        color: Color(0xFFF2F7FA), // Soft light solid bottom sheet
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         border: Border(
-          top: BorderSide(color: AppTheme.surfaceBorder, width: 1.5),
-          left: BorderSide(color: AppTheme.surfaceBorder, width: 1),
-          right: BorderSide(color: AppTheme.surfaceBorder, width: 1),
+          top: BorderSide(color: Colors.white, width: 1.5),
         ),
       ),
       padding: EdgeInsets.only(
@@ -144,7 +182,7 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: AppTheme.surfaceBorder,
+                color: AppTheme.textMuted.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -163,15 +201,15 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: isP2P ? AppTheme.purpleAgent.withOpacity(0.2) : AppTheme.amberWarning.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(6),
+                          color: isP2P ? AppTheme.lavenderAccent.withValues(alpha: 0.25) : AppTheme.amberWarning.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           isP2P ? "P2P UPI Transfer" : "Unrecognized Merchant",
                           style: TextStyle(
-                            color: isP2P ? AppTheme.purpleAgent : AppTheme.amberWarning,
+                            color: isP2P ? AppTheme.lavenderDeep : const Color(0xFFB45309),
                             fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
@@ -188,7 +226,7 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
                     style: const TextStyle(
                       color: AppTheme.textPrimary,
                       fontSize: 18,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
@@ -197,8 +235,8 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
                 "₹${amount.toStringAsFixed(amount.truncateToDouble() == amount ? 0 : 2)}",
                 style: const TextStyle(
                   color: AppTheme.roseDanger,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -233,19 +271,20 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
                         if (chip == "Rent") _selectedCategory = "Housing";
                         if (chip == "Gift") _selectedCategory = "Shopping";
                         if (chip == "Split") _selectedCategory = "Food & Dining";
+                        if (chip == "Personal") _selectedCategory = "Personal";
                       });
                     },
-                    selectedColor: AppTheme.indigoAccent,
-                    backgroundColor: AppTheme.surfaceElevated,
+                    selectedColor: AppTheme.lavenderAccent,
+                    backgroundColor: Colors.white,
                     labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : AppTheme.textPrimary,
+                      color: isSelected ? Colors.black : AppTheme.textPrimary,
                       fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                     ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(16),
                       side: BorderSide(
-                        color: isSelected ? AppTheme.indigoAccent : AppTheme.surfaceBorder,
+                        color: isSelected ? AppTheme.lavenderAccent : AppTheme.glassBorder,
                       ),
                     ),
                   ),
@@ -256,7 +295,7 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
 
           const SizedBox(height: 18),
 
-          // Row 2: Standard Categories Grid / Wrap
+          // Row 2: Standard Categories Grid
           const Text(
             "Select Budget Category",
             style: TextStyle(
@@ -273,35 +312,28 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
               final isSelected = _selectedCategory == cat;
               return InkWell(
                 onTap: () {
-                  if (cat == "Other") {
-                    setState(() {
-                      _isCustomLabelActive = true;
-                      _selectedCategory = "Other";
-                    });
-                  } else {
-                    setState(() {
-                      _selectedCategory = cat;
-                      _isCustomLabelActive = false;
-                    });
-                  }
+                  setState(() {
+                    _selectedCategory = cat;
+                    _isCustomLabelActive = false;
+                  });
                 },
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: isSelected ? AppTheme.emeraldPrimary.withOpacity(0.2) : AppTheme.surfaceElevated,
-                    borderRadius: BorderRadius.circular(10),
+                    color: isSelected ? AppTheme.tealPrimary.withValues(alpha: 0.2) : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isSelected ? AppTheme.emeraldPrimary : AppTheme.surfaceBorder,
+                      color: isSelected ? AppTheme.tealPrimary : AppTheme.glassBorder,
                       width: 1.2,
                     ),
                   ),
                   child: Text(
                     cat,
                     style: TextStyle(
-                      color: isSelected ? AppTheme.emeraldPrimary : AppTheme.textPrimary,
+                      color: isSelected ? AppTheme.tealPrimary : AppTheme.textPrimary,
                       fontSize: 13,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                     ),
                   ),
                 ),
@@ -317,7 +349,7 @@ class _CategorizeBottomSheetState extends State<CategorizeBottomSheet> {
               style: const TextStyle(color: AppTheme.textPrimary),
               decoration: const InputDecoration(
                 hintText: "Enter custom category (e.g. Gym, Books, Pets)",
-                prefixIcon: Icon(Icons.tag, color: AppTheme.emeraldPrimary, size: 20),
+                prefixIcon: Icon(Icons.tag, color: AppTheme.tealPrimary, size: 20),
               ),
             ),
           ],

@@ -10,7 +10,7 @@ class AIAgentsHubScreen extends StatefulWidget {
 }
 
 class _AIAgentsHubScreenState extends State<AIAgentsHubScreen> {
-  String _activeAgent = "auditor"; // "auditor", "advisor", "strategist"
+  String _activeAgent = "auditor";
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _isSending = false;
@@ -27,7 +27,7 @@ class _AIAgentsHubScreenState extends State<AIAgentsHubScreen> {
     "auditor": {
       "title": "Expense Auditor",
       "icon": Icons.search,
-      "color": AppTheme.cyanTech,
+      "color": AppTheme.tealPrimary,
       "badge": "Forensic Ledger",
       "intro": "👋 Switched to **Forensic Expense Auditor**.\n\nI can analyze your spending spikes, detect recurring subscription leakage, and identify category surges.",
       "quickPrompts": [
@@ -51,7 +51,7 @@ class _AIAgentsHubScreenState extends State<AIAgentsHubScreen> {
     "strategist": {
       "title": "Wealth Strategist",
       "icon": Icons.auto_awesome,
-      "color": AppTheme.purpleAgent,
+      "color": AppTheme.lavenderDeep,
       "badge": "Goal Accelerator",
       "intro": "💎 Switched to **Wealth & Goal Strategist**.\n\nI can project your laptop & emergency fund completion dates and formulate weekly surplus reallocations.",
       "quickPrompts": [
@@ -127,58 +127,66 @@ class _AIAgentsHubScreenState extends State<AIAgentsHubScreen> {
   Widget build(BuildContext context) {
     final currentProfile = _agentProfiles[_activeAgent]!;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: (currentProfile["color"] as Color).withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
+    return Container(
+      decoration: BoxDecoration(gradient: AppTheme.backgroundGradient),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (currentProfile["color"] as Color).withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(currentProfile["icon"] as IconData, color: currentProfile["color"] as Color, size: 18),
               ),
-              child: Icon(currentProfile["icon"] as IconData, color: currentProfile["color"] as Color, size: 18),
-            ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(currentProfile["title"] as String, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                Text(currentProfile["badge"] as String, style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
-              ],
-            ),
-          ],
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(currentProfile["title"] as String, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                  Text(currentProfile["badge"] as String, style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+                ],
+              ),
+            ],
+          ),
         ),
-      ),
-      body: Column(
-        children: [
-          // Agent Selector Tabs
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: const BoxDecoration(
-              color: AppTheme.surface,
-              border: Border(bottom: BorderSide(color: AppTheme.surfaceBorder)),
-            ),
-            child: Row(
-              children: _agentProfiles.entries.map((entry) {
-                final isSelected = _activeAgent == entry.key;
-                final color = entry.value["color"] as Color;
+        body: Column(
+          children: [
+            // Agent Selector Tabs (Soft Glass Bar)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: AppTheme.glassSurface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppTheme.glassBorder),
+              ),
+              child: Row(
+                children: _agentProfiles.entries.map((entry) {
+                  final isSelected = _activeAgent == entry.key;
+                  final color = entry.value["color"] as Color;
 
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  return Expanded(
                     child: InkWell(
                       onTap: () => _switchAgent(entry.key),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(16),
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
-                          color: isSelected ? color.withOpacity(0.15) : AppTheme.surfaceElevated,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isSelected ? color : AppTheme.surfaceBorder,
-                            width: 1.2,
-                          ),
+                          color: isSelected ? Colors.white : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.05),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
                         ),
                         child: Column(
                           children: [
@@ -187,156 +195,166 @@ class _AIAgentsHubScreenState extends State<AIAgentsHubScreen> {
                               size: 16,
                               color: isSelected ? color : AppTheme.textMuted,
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 3),
                             Text(
                               entry.value["title"] as String,
                               style: TextStyle(
-                                color: isSelected ? color : AppTheme.textSecondary,
-                                fontSize: 11,
-                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                color: isSelected ? color : AppTheme.textMuted,
+                                fontSize: 10.5,
+                                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
                               ),
                             ),
                           ],
                         ),
                       ),
                     ),
-                  ),
-                );
-              }).toList(),
+                  );
+                }).toList(),
+              ),
             ),
-          ),
 
-          // Messages List
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (ctx, index) {
-                final msg = _messages[index];
-                final isUser = msg["role"] == "user";
-                final agent = msg["agent"] ?? _activeAgent;
-                final agentColor = (_agentProfiles[agent]?["color"] as Color?) ?? AppTheme.indigoAccent;
+            // Messages List
+            Expanded(
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                itemCount: _messages.length,
+                itemBuilder: (ctx, index) {
+                  final msg = _messages[index];
+                  final isUser = msg["role"] == "user";
+                  final agent = msg["agent"] ?? _activeAgent;
+                  final agentColor = (_agentProfiles[agent]?["color"] as Color?) ?? AppTheme.tealPrimary;
 
-                return Align(
-                  alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: isUser ? AppTheme.indigoAccent : AppTheme.surface,
-                      borderRadius: BorderRadius.circular(16).copyWith(
-                        bottomRight: isUser ? const Radius.circular(0) : const Radius.circular(16),
-                        bottomLeft: !isUser ? const Radius.circular(0) : const Radius.circular(16),
-                      ),
-                      border: Border.all(
-                        color: isUser ? AppTheme.indigoAccent : AppTheme.surfaceBorder,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (!isUser) ...[
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(color: agentColor, shape: BoxShape.circle),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                _agentProfiles[agent]?["title"] ?? "Assistant",
-                                style: TextStyle(
-                                  color: agentColor,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                        ],
-                        Text(
-                          msg["content"] ?? "",
-                          style: TextStyle(
-                            color: isUser ? Colors.white : AppTheme.textPrimary,
-                            fontSize: 13.5,
-                            height: 1.45,
-                          ),
+                  return Align(
+                    alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: isUser ? AppTheme.tealPrimary : AppTheme.glassSurfaceElevated,
+                        borderRadius: BorderRadius.circular(20).copyWith(
+                          bottomRight: isUser ? const Radius.circular(0) : const Radius.circular(20),
+                          bottomLeft: !isUser ? const Radius.circular(0) : const Radius.circular(20),
                         ),
-                        if (msg["model"] != null) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            "Model: ${msg['model']}",
-                            style: const TextStyle(color: AppTheme.textMuted, fontSize: 10),
+                        border: Border.all(
+                          color: isUser ? AppTheme.tealPrimary : AppTheme.glassBorder,
+                          width: 1.2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           ),
                         ],
-                      ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (!isUser) ...[
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(color: agentColor, shape: BoxShape.circle),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _agentProfiles[agent]?["title"] ?? "Assistant",
+                                  style: TextStyle(
+                                    color: agentColor,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                          ],
+                          Text(
+                            msg["content"] ?? "",
+                            style: TextStyle(
+                              color: isUser ? Colors.white : AppTheme.textPrimary,
+                              fontSize: 13.5,
+                              height: 1.45,
+                            ),
+                          ),
+                          if (msg["model"] != null) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              "Model: ${msg['model']}",
+                              style: const TextStyle(color: AppTheme.textMuted, fontSize: 10),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            // Quick Prompts Row
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Row(
+                children: (currentProfile["quickPrompts"] as List<String>).map((prompt) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: ActionChip(
+                      label: Text(prompt, style: const TextStyle(fontSize: 11.5, color: AppTheme.textSecondary)),
+                      backgroundColor: AppTheme.glassSurface,
+                      side: const BorderSide(color: AppTheme.glassBorder),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      onPressed: () => _sendMessage(prompt),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+
+            // Input Bar
+            Container(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 8,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 90, // Leave room for floating nav
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.transparent,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _messageController,
+                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13.5),
+                      decoration: InputDecoration(
+                        hintText: "Ask ${_agentProfiles[_activeAgent]!['title']}...",
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
+                        filled: true,
+                        fillColor: const Color(0x80FFFFFF),
+                      ),
+                      onSubmitted: _sendMessage,
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-
-          // Quick Prompts Row
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: Row(
-              children: (currentProfile["quickPrompts"] as List<String>).map((prompt) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: ActionChip(
-                    label: Text(prompt, style: const TextStyle(fontSize: 11.5, color: AppTheme.textSecondary)),
-                    backgroundColor: AppTheme.surfaceElevated,
-                    side: const BorderSide(color: AppTheme.surfaceBorder),
-                    onPressed: () => _sendMessage(prompt),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: _isSending
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.tealPrimary))
+                        : const Icon(Icons.send_rounded, color: AppTheme.tealPrimary),
+                    onPressed: () => _sendMessage(_messageController.text),
                   ),
-                );
-              }).toList(),
+                ],
+              ),
             ),
-          ),
-
-          // Input Bar
-          Container(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 8,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 12,
-            ),
-            decoration: const BoxDecoration(
-              color: AppTheme.surface,
-              border: Border(top: BorderSide(color: AppTheme.surfaceBorder)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13.5),
-                    decoration: InputDecoration(
-                      hintText: "Ask ${_agentProfiles[_activeAgent]!['title']}...",
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
-                    ),
-                    onSubmitted: _sendMessage,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: _isSending
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.emeraldPrimary))
-                      : const Icon(Icons.send_rounded, color: AppTheme.emeraldPrimary),
-                  onPressed: () => _sendMessage(_messageController.text),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -27,7 +27,7 @@ class _UncategorizedTransactionCardState extends State<UncategorizedTransactionC
   bool _isOtherActive = false;
 
   final List<String> _quickChips = ["Personal", "Friend", "Rent", "Gift", "Split", "Other"];
-  final List<String> _categories = [
+  static const List<String> _categories = [
     "Food & Dining",
     "Shopping",
     "Transportation",
@@ -58,15 +58,14 @@ class _UncategorizedTransactionCardState extends State<UncategorizedTransactionC
       date: tx.date,
       confidence: 1.0,
       status: "confirmed",
-      notes: note ?? _selectedP2PChip,
+      notes: note ?? _selectedP2PChip ?? tx.notes,
     );
 
-    // Learn mapping in dictionary
-    CategorizationService().learnMerchant(tx.merchant, category);
-    await ApiService().addTransaction(updatedTx);
-    await ApiService().learnMerchantMapping(tx.merchant, category);
+    // Learn mapping in dictionary (local + backend)
+    await CategorizationService().learnMerchant(tx.merchant, category);
+    final savedTx = await ApiService().updateTransaction(updatedTx, previousCategory: tx.category);
 
-    widget.onResolved(updatedTx);
+    widget.onResolved(savedTx);
   }
 
   @override
@@ -91,7 +90,7 @@ class _UncategorizedTransactionCardState extends State<UncategorizedTransactionC
                     color: AppTheme.lavenderAccent.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.help_outline, color: AppTheme.lavenderAccent, size: 20),
+                  child: const Icon(Icons.help_outline, color: AppTheme.lavenderDeep, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -122,7 +121,7 @@ class _UncategorizedTransactionCardState extends State<UncategorizedTransactionC
                             ),
                             child: const Text(
                               "Needs Category",
-                              style: TextStyle(color: AppTheme.amberWarning, fontSize: 9.5, fontWeight: FontWeight.w700),
+                              style: TextStyle(color: Color(0xFFB45309), fontSize: 9.5, fontWeight: FontWeight.w700),
                             ),
                           ),
                         ],
@@ -178,13 +177,18 @@ class _UncategorizedTransactionCardState extends State<UncategorizedTransactionC
                         });
                       },
                       selectedColor: AppTheme.lavenderAccent,
-                      backgroundColor: const Color(0x1FFFFFFF),
+                      backgroundColor: Colors.white,
                       labelStyle: TextStyle(
                         color: isSelected ? Colors.black : AppTheme.textPrimary,
                         fontSize: 11.5,
                         fontWeight: FontWeight.w700,
                       ),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: isSelected ? AppTheme.lavenderAccent : AppTheme.glassBorder,
+                        ),
+                      ),
                     ),
                   );
                 }).toList(),
@@ -219,7 +223,7 @@ class _UncategorizedTransactionCardState extends State<UncategorizedTransactionC
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
-                            color: isSelected ? AppTheme.tealPrimary.withValues(alpha: 0.25) : const Color(0x1FFFFFFF),
+                            color: isSelected ? AppTheme.tealPrimary.withValues(alpha: 0.25) : Colors.white,
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                               color: isSelected ? AppTheme.tealPrimary : AppTheme.glassBorder,
@@ -241,7 +245,8 @@ class _UncategorizedTransactionCardState extends State<UncategorizedTransactionC
                     padding: const EdgeInsets.only(right: 6.0),
                     child: ActionChip(
                       label: const Text("Other +"),
-                      backgroundColor: const Color(0x1FFFFFFF),
+                      backgroundColor: Colors.white,
+                      side: const BorderSide(color: AppTheme.glassBorder),
                       onPressed: () => setState(() => _isOtherActive = true),
                     ),
                   ),

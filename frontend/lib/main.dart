@@ -1,18 +1,32 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'theme/app_theme.dart';
+import 'models/models.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/permissions_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/budget_screen.dart';
 import 'screens/goals_screen.dart';
 import 'screens/transactions_screen.dart';
 import 'screens/ai_agents_hub_screen.dart';
+import 'services/storage_service.dart';
 import 'services/transaction_capture_service.dart';
+import 'widgets/categorize_bottom_sheet.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Initialize native capture listeners and drain queue
+  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark.copyWith(
+    statusBarColor: Colors.transparent,
+  ));
+
+  // Initialize Hive local persistence
+  await StorageService().initialize();
+
+  // Initialize native capture listeners
   TransactionCaptureService().initialize();
+
   runApp(const FinTrackApp());
 }
 
@@ -38,13 +52,28 @@ class AppEntryRouter extends StatefulWidget {
 }
 
 class _AppEntryRouterState extends State<AppEntryRouter> {
-  bool _isOnboarded = true; // Set to true by default for immediate dev usage or toggle
-
   @override
   Widget build(BuildContext context) {
-    if (!_isOnboarded) {
-      return OnboardingScreen(onFinish: () => setState(() => _isOnboarded = true));
+    if (!StorageService().isOnboarded) {
+      return OnboardingScreen(
+        onFinish: () {
+          setState(() {
+            StorageService().isOnboarded = true;
+          });
+        },
+      );
     }
+
+    if (!StorageService().isPermissionsGranted) {
+      return PermissionsScreen(
+        onCompleted: () {
+          setState(() {
+            StorageService().isPermissionsGranted = true;
+          });
+        },
+      );
+    }
+
     return const MainNavigationShell();
   }
 }
@@ -58,6 +87,52 @@ class MainNavigationShell extends StatefulWidget {
 
 class _MainNavigationShellState extends State<MainNavigationShell> {
   int _currentIndex = 0;
+  StreamSubscription<TransactionModel>? _captureSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _captureSub = TransactionCaptureService().onTransactionCaptured.listen((tx) {
+      if (mounted) {
+        final isP2P = tx.source == 'p2p';
+        final isLowConf = tx.confidence < 0.85 || tx.category == 'Uncategorized';
+        if (isP2P || isLowConf) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: const Color(0xFF333333),
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.only(left: 16, right: 16, bottom: 90),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              content: Text(
+                "New ₹${tx.amount.toStringAsFixed(0)} to ${tx.merchant} - tap to categorize",
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              action: SnackBarAction(
+                label: "Categorize",
+                textColor: AppTheme.tealLight,
+                onPressed: () {
+                  CategorizeBottomSheet.show(
+                    context,
+                    transaction: tx,
+                    onCategorized: (_) {
+                      setState(() {});
+                    },
+                  );
+                },
+              ),
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _captureSub?.cancel();
+    super.dispose();
+  }
 
   void _onNavigateTab(int index) {
     setState(() => _currentIndex = index);
@@ -87,23 +162,23 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   Widget _buildFloatingPillNavBar() {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.only(left: 20, right: 20, bottom: 12),
+        padding: const EdgeInsets.only(left: 24, right: 24, bottom: 24),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(32),
+          borderRadius: BorderRadius.circular(30),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
             child: Container(
-              height: 64,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              height: 62,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color: const Color(0xB3131B2E), // 70% opacity dark surface
-                borderRadius: BorderRadius.circular(32),
-                border: Border.all(color: AppTheme.glassBorder, width: 1.2),
+                color: const Color(0xCCFFFFFF), // 80% white background
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: AppTheme.glassBorder, width: 1.5),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
+                    color: Colors.black.withValues(alpha: 0.10),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
                   ),
                 ],
               ),
@@ -132,9 +207,9 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       borderRadius: BorderRadius.circular(20),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.tealPrimary.withValues(alpha: 0.2) : Colors.transparent,
+          color: isSelected ? AppTheme.tealPrimary.withValues(alpha: 0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Column(

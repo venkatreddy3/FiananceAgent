@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'api_service.dart';
+import 'storage_service.dart';
 
 class CategorizationService {
   static final CategorizationService _instance = CategorizationService._internal();
   factory CategorizationService() => _instance;
-  CategorizationService._internal();
+  CategorizationService._internal() {
+    _loadLearnedRules();
+  }
 
   // In-memory resolved merchant cache (prevents duplicate lookups)
   final Map<String, Map<String, dynamic>> _cache = {};
@@ -62,12 +65,19 @@ class CategorizationService {
     "haircut": "Personal",
     "beauty": "Personal",
     "barber": "Personal",
+    "gym": "Personal",
+    "fitness": "Personal",
     "fuel": "Transportation",
     "petrol": "Transportation",
     "diesel": "Transportation",
     "toll": "Transportation",
     "parking": "Transportation",
     "metro": "Transportation",
+    "taxi": "Transportation",
+    "cab": "Transportation",
+    "flight": "Transportation",
+    "airline": "Transportation",
+    "train": "Transportation",
     "restaurant": "Food & Dining",
     "cafe": "Food & Dining",
     "bakery": "Food & Dining",
@@ -85,17 +95,29 @@ class CategorizationService {
     "medicals": "Healthcare",
     "pharmacy": "Healthcare",
     "diagnostic": "Healthcare",
+    "doctor": "Healthcare",
     "electricity": "Bills & Utilities",
     "broadband": "Bills & Utilities",
     "water": "Bills & Utilities",
     "gas": "Bills & Utilities",
+    "recharge": "Bills & Utilities",
+    "bill": "Bills & Utilities",
     "cinema": "Entertainment",
     "movie": "Entertainment",
     "theatre": "Entertainment",
     "games": "Entertainment",
+    "gaming": "Entertainment",
     "rent": "Housing",
     "maintenance": "Housing",
+    "furniture": "Housing",
   };
+
+  void _loadLearnedRules() {
+    try {
+      final learned = StorageService().getLearnedMerchants();
+      _localDictionary.addAll(learned);
+    } catch (_) {}
+  }
 
   /// 4-Method Categorization Cascade
   Future<Map<String, dynamic>> categorize({
@@ -131,9 +153,11 @@ class CategorizationService {
       _cache[cleanKey] = res;
       return res;
     }
-    // Substring match in dictionary
+
+    // Word-boundary match on cleanKey (merchant name only)
     for (var entry in _localDictionary.entries) {
-      if (cleanKey.contains(entry.key) || entry.key.contains(cleanKey)) {
+      final pattern = RegExp(r'\b' + RegExp.escape(entry.key) + r'\b', caseSensitive: false);
+      if (pattern.hasMatch(cleanKey)) {
         final res = {
           "category": entry.value,
           "confidence": 0.95,
@@ -144,10 +168,10 @@ class CategorizationService {
       }
     }
 
-    // --- Method 2: Keyword Rules (Fast Regex Match) ---
-    final textToInspect = "$cleanKey $rawText".toLowerCase();
+    // --- Method 2: Keyword Rules (Whole-word regex match on merchant name ONLY) ---
     for (var entry in _keywordRules.entries) {
-      if (textToInspect.contains(entry.key)) {
+      final pattern = RegExp(r'\b' + RegExp.escape(entry.key) + r'\b', caseSensitive: false);
+      if (pattern.hasMatch(cleanKey)) {
         final res = {
           "category": entry.value,
           "confidence": 0.90,
@@ -160,7 +184,7 @@ class CategorizationService {
 
     // --- Method 3: resolveMerchant (Google Places API / Cloud Function) ---
     final placesCategory = await _resolveWithGooglePlaces(cleanKey);
-    if (placesCategory != null) {
+    if (placesCategory != null && placesCategory.isNotEmpty && placesCategory != "Uncategorized") {
       final res = {
         "category": placesCategory,
         "confidence": 0.88,
@@ -182,17 +206,15 @@ class CategorizationService {
       return res;
     }
 
-    // Fallback if nothing resolves
-    final uncat = {
+    // Fallback if nothing resolves (Do NOT cache network failures / unresolved)
+    return {
       "category": "Uncategorized",
       "confidence": 0.0,
       "method": "unresolved",
     };
-    _cache[cleanKey] = uncat;
-    return uncat;
   }
 
-  void learnMerchant(String merchantName, String category) {
+  Future<void> learnMerchant(String merchantName, String category) async {
     final cleanKey = merchantName.trim().toLowerCase();
     _localDictionary[cleanKey] = category;
     _cache[cleanKey] = {
@@ -200,13 +222,18 @@ class CategorizationService {
       "confidence": 1.0,
       "method": "user_learned",
     };
+    await StorageService().saveLearnedMerchant(cleanKey, category);
+    await ApiService().learnMerchantMapping(cleanKey, category);
   }
 
   Future<String?> _resolveWithGooglePlaces(String merchantName) async {
     try {
       final res = await http.post(
         Uri.parse('${ApiService().baseUrl}/api/resolve-merchant'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': StorageService().apiKey,
+        },
         body: json.encode({'merchant_name': merchantName}),
       ).timeout(const Duration(seconds: 3));
       if (res.statusCode == 200) {
@@ -223,9 +250,9 @@ class CategorizationService {
     try {
       final res = await ApiService().parseNotification("Paid Rs $amount at $merchantName");
       final catData = res["categorization"];
-      if (catData != null) {
+      if (catData != null && catData["category"] != null && catData["category"] != "Uncategorized") {
         return {
-          "category": catData["category"] ?? "Other",
+          "category": catData["category"],
           "confidence": (catData["confidence"] as num?)?.toDouble() ?? 0.75,
         };
       }

@@ -52,7 +52,7 @@ class _NotificationSimulatorDialogState extends State<NotificationSimulatorDialo
     {
       "app": "Paytm",
       "text": "Paid Rs 85.00 to Ramesh Chai & Snacks at HSR Layout via Paytm.",
-      "label": "Local Chai Vendor (Ollama / Popup)",
+      "label": "Local Chai Vendor (Places / Ollama)",
       "icon": "☕"
     },
   ];
@@ -77,7 +77,6 @@ class _NotificationSimulatorDialogState extends State<NotificationSimulatorDialo
     final extracted = res["extracted"] ?? {};
 
     if (needsConfirmation) {
-      // Trigger native Bottom-Sheet flow
       CategorizeBottomSheet.show(
         context,
         extractedData: extracted,
@@ -85,12 +84,12 @@ class _NotificationSimulatorDialogState extends State<NotificationSimulatorDialo
           widget.onTransactionProcessed(tx, false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              backgroundColor: AppTheme.surfaceElevated,
+              backgroundColor: AppTheme.tealPrimary,
               content: Row(
                 children: [
-                  const Icon(Icons.check_circle, color: AppTheme.emeraldPrimary, size: 20),
+                  const Icon(Icons.check_circle, color: Colors.white, size: 20),
                   const SizedBox(width: 8),
-                  Text("Saved to ${tx.category} & learned in dictionary!"),
+                  Text("Saved to ${tx.category} & learned in dictionary!", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                 ],
               ),
               behavior: SnackBarBehavior.floating,
@@ -99,7 +98,6 @@ class _NotificationSimulatorDialogState extends State<NotificationSimulatorDialo
         },
       );
     } else {
-      // Auto-tag silently with toast
       final tx = res["transaction"] != null
           ? TransactionModel.fromJson(res["transaction"])
           : TransactionModel(
@@ -119,23 +117,23 @@ class _NotificationSimulatorDialogState extends State<NotificationSimulatorDialo
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppTheme.surfaceElevated,
+          backgroundColor: const Color(0xFF1E293B),
           duration: const Duration(seconds: 4),
           content: Row(
             children: [
-              const Icon(Icons.bolt, color: AppTheme.cyanTech, size: 20),
+              const Icon(Icons.bolt, color: AppTheme.tealLight, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   "Auto-categorized ₹${tx.amount.toStringAsFixed(0)} as ${tx.category} (${((tx.confidence) * 100).toStringAsFixed(0)}% conf)",
-                  style: const TextStyle(fontSize: 13),
+                  style: const TextStyle(fontSize: 13, color: Colors.white),
                 ),
               ),
             ],
           ),
           action: SnackBarAction(
             label: "Edit",
-            textColor: AppTheme.indigoAccent,
+            textColor: AppTheme.tealLight,
             onPressed: () {
               CategorizeBottomSheet.show(
                 context,
@@ -153,10 +151,10 @@ class _NotificationSimulatorDialogState extends State<NotificationSimulatorDialo
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: AppTheme.surface,
+      backgroundColor: const Color(0xFFF0F5F8),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: AppTheme.surfaceBorder),
+        borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(color: AppTheme.glassBorder),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -169,25 +167,25 @@ class _NotificationSimulatorDialogState extends State<NotificationSimulatorDialo
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppTheme.cyanTech.withOpacity(0.15),
+                    color: AppTheme.tealPrimary.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.notifications_active, color: AppTheme.cyanTech, size: 22),
+                  child: const Icon(Icons.notifications_active, color: AppTheme.tealPrimary, size: 22),
                 ),
                 const SizedBox(width: 12),
                 const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "Simulate Native Capture",
+                      "Native Capture Tester",
                       style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 16,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                     Text(
-                      "Test PhonePe / GPay / SMS listeners",
+                      "Simulate PhonePe / GPay / SMS broadcasts",
                       style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
                     ),
                   ],
@@ -196,7 +194,7 @@ class _NotificationSimulatorDialogState extends State<NotificationSimulatorDialo
             ),
             const SizedBox(height: 16),
             const Text(
-              "Select a realistic test payload:",
+              "Select test transaction:",
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 10),
@@ -205,7 +203,7 @@ class _NotificationSimulatorDialogState extends State<NotificationSimulatorDialo
               const Center(
                 child: Padding(
                   padding: EdgeInsets.all(24.0),
-                  child: CircularProgressIndicator(color: AppTheme.cyanTech),
+                  child: CircularProgressIndicator(color: AppTheme.tealPrimary),
                 ),
               )
             else ...[
@@ -218,9 +216,9 @@ class _NotificationSimulatorDialogState extends State<NotificationSimulatorDialo
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
-                        color: AppTheme.surfaceElevated,
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.surfaceBorder),
+                        border: Border.all(color: AppTheme.glassBorder),
                       ),
                       child: Row(
                         children: [
@@ -235,15 +233,15 @@ class _NotificationSimulatorDialogState extends State<NotificationSimulatorDialo
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                       decoration: BoxDecoration(
-                                        color: AppTheme.indigoAccent.withOpacity(0.2),
+                                        color: AppTheme.lavenderAccent.withValues(alpha: 0.25),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
                                         preset["app"]!,
                                         style: const TextStyle(
-                                          color: AppTheme.indigoAccent,
+                                          color: AppTheme.lavenderDeep,
                                           fontSize: 10,
-                                          fontWeight: FontWeight.w700,
+                                          fontWeight: FontWeight.bold,
                                         ),
                                       ),
                                     ),
@@ -285,7 +283,7 @@ class _NotificationSimulatorDialogState extends State<NotificationSimulatorDialo
                 decoration: InputDecoration(
                   hintText: "Or paste custom SMS / notification text...",
                   suffixIcon: IconButton(
-                    icon: const Icon(Icons.send, color: AppTheme.cyanTech, size: 20),
+                    icon: const Icon(Icons.send, color: AppTheme.tealPrimary, size: 20),
                     onPressed: () {
                       if (_customTextController.text.trim().isNotEmpty) {
                         _simulateCapture(_customTextController.text.trim(), "SMS");

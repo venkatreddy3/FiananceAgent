@@ -1,278 +1,268 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
+import 'storage_service.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
 
-  // Default to localhost:8000 (can be updated dynamically in settings)
-  String baseUrl = "http://localhost:8000";
+  String get baseUrl => StorageService().baseUrl;
+  set baseUrl(String val) => StorageService().baseUrl = val;
 
-  // In-memory fallback cache
-  List<TransactionModel> _fallbackTransactions = [
-    TransactionModel(
-      id: 1,
-      title: "Monthly Salary",
-      amount: 65000.0,
-      merchant: "Acme Corp",
-      category: "Income",
-      type: "income",
-      date: "2026-09-01",
-      confidence: 1.0,
-      status: "confirmed",
-      source: "manual",
-    ),
-    TransactionModel(
-      id: 2,
-      title: "Apartment Rent",
-      amount: 18000.0,
-      merchant: "Downtown Realty",
-      category: "Housing",
-      type: "expense",
-      date: "2026-09-02",
-      confidence: 1.0,
-      status: "confirmed",
-      source: "notification",
-      isRecurring: true,
-    ),
-    TransactionModel(
-      id: 3,
-      title: "Electricity & Water",
-      amount: 2450.0,
-      merchant: "BESCOM",
-      category: "Bills & Utilities",
-      type: "expense",
-      date: "2026-09-05",
-      confidence: 1.0,
-      status: "auto",
-      source: "sms",
-    ),
-    TransactionModel(
-      id: 4,
-      title: "Blinkit Quick Grocery",
-      amount: 1240.0,
-      merchant: "Blinkit",
-      category: "Food & Dining",
-      type: "expense",
-      date: "2026-09-08",
-      confidence: 1.0,
-      status: "auto",
-      source: "notification",
-    ),
-    TransactionModel(
-      id: 5,
-      title: "Uber Commute",
-      amount: 420.0,
-      merchant: "Uber",
-      category: "Transportation",
-      type: "expense",
-      date: "2026-09-10",
-      confidence: 1.0,
-      status: "auto",
-      source: "notification",
-    ),
-    TransactionModel(
-      id: 6,
-      title: "Netflix & Spotify",
-      amount: 999.0,
-      merchant: "Netflix",
-      category: "Entertainment",
-      type: "expense",
-      date: "2026-09-12",
-      confidence: 1.0,
-      status: "auto",
-      source: "sms",
-      isRecurring: true,
-    ),
-    TransactionModel(
-      id: 7,
-      title: "Nike Running Shoes",
-      amount: 6499.0,
-      merchant: "Nike",
-      category: "Shopping",
-      type: "expense",
-      date: "2026-09-18",
-      confidence: 1.0,
-      status: "confirmed",
-      source: "notification",
-      aiFlagged: true,
-      aiFlagReason: "Discretionary spike in Shopping category",
-    ),
-  ];
+  Map<String, String> get _headers => {
+        'Content-Type': 'application/json',
+        'X-API-Key': StorageService().apiKey,
+      };
 
-  List<BudgetModel> _fallbackBudgets = [
-    BudgetModel(category: "Food & Dining", allocatedAmount: 12000.0, spentAmount: 2710.0),
-    BudgetModel(category: "Housing", allocatedAmount: 18000.0, spentAmount: 18000.0),
-    BudgetModel(category: "Transportation", allocatedAmount: 4500.0, spentAmount: 1920.0),
-    BudgetModel(category: "Shopping", allocatedAmount: 8000.0, spentAmount: 6499.0),
-    BudgetModel(category: "Entertainment", allocatedAmount: 3000.0, spentAmount: 999.0),
-    BudgetModel(category: "Bills & Utilities", allocatedAmount: 3500.0, spentAmount: 2450.0),
-  ];
-
-  List<SavingsGoalModel> _fallbackGoals = [
-    SavingsGoalModel(
-      id: 1,
-      title: "MacBook Pro M3 (Laptop)",
-      targetAmount: 60000.0,
-      currentProgress: 24000.0,
-      targetDate: "2027-03-31",
-      category: "Gadgets",
-      monthlyTarget: 10000.0,
-      status: "active",
-    ),
-    SavingsGoalModel(
-      id: 2,
-      title: "Emergency Safety Fund (6 Mo)",
-      targetAmount: 150000.0,
-      currentProgress: 95000.0,
-      targetDate: "2027-09-30",
-      category: "Safety",
-      monthlyTarget: 12000.0,
-      status: "active",
-    ),
-    SavingsGoalModel(
-      id: 3,
-      title: "Goa Trip with Friends",
-      targetAmount: 25000.0,
-      currentProgress: 18000.0,
-      targetDate: "2026-12-15",
-      category: "Travel",
-      monthlyTarget: 3500.0,
-      status: "active",
-    ),
-  ];
+  bool isBackendOnline = false;
 
   // --- Health Check ---
   Future<Map<String, dynamic>> checkHealth() async {
     try {
-      final res = await http.get(Uri.parse('$baseUrl/api/health')).timeout(const Duration(seconds: 3));
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/health'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 3));
+
       if (res.statusCode == 200) {
+        isBackendOnline = true;
         return json.decode(res.body);
       }
     } catch (_) {}
-    return {"status": "offline_mode", "ollama_connected": false, "available_models": []};
+    isBackendOnline = false;
+    return {"status": "offline", "ollama_connected": false, "available_models": []};
   }
 
-  // --- Fetch Transactions ---
+  // --- Transactions ---
   Future<List<TransactionModel>> getTransactions() async {
     try {
-      final res = await http.get(Uri.parse('$baseUrl/api/transactions')).timeout(const Duration(seconds: 4));
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/transactions'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 4));
+
       if (res.statusCode == 200) {
+        isBackendOnline = true;
         final List list = json.decode(res.body);
-        return list.map((item) => TransactionModel.fromJson(item)).toList();
+        final txs = list.map((item) => TransactionModel.fromJson(item)).toList();
+        // Sync to local storage
+        for (var t in txs) {
+          await StorageService().saveTransaction(t);
+        }
+        return txs;
       }
-    } catch (_) {}
-    return _fallbackTransactions;
+    } catch (_) {
+      isBackendOnline = false;
+    }
+    // Return real offline local storage data (never fake data)
+    return StorageService().getTransactions();
   }
 
-  // --- Add Transaction ---
   Future<TransactionModel> addTransaction(TransactionModel tx) async {
+    // 1. Save to local storage first (offline-first)
+    await StorageService().saveTransaction(tx);
+
+    // Update local budget spent
+    final budgets = StorageService().getBudgets();
+    for (var b in budgets) {
+      if (b.category == tx.category && tx.type == "expense") {
+        b.spentAmount += tx.amount;
+        await StorageService().saveBudget(b);
+      }
+    }
+
+    // 2. Try to sync to backend
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/api/transactions'),
-        headers: {'Content-Type': 'application/json'},
+        headers: _headers,
         body: json.encode(tx.toJson()),
       ).timeout(const Duration(seconds: 4));
+
       if (res.statusCode == 200) {
+        isBackendOnline = true;
         return TransactionModel.fromJson(json.decode(res.body));
       }
-    } catch (_) {}
-    // Fallback local addition
-    final newTx = TransactionModel(
-      id: DateTime.now().millisecondsSinceEpoch,
-      title: tx.title,
-      amount: tx.amount,
-      merchant: tx.merchant,
-      rawText: tx.rawText,
-      category: tx.category,
-      source: tx.source,
-      type: tx.type,
-      date: tx.date,
-      confidence: tx.confidence,
-      status: tx.status,
-      notes: tx.notes,
-    );
-    _fallbackTransactions.insert(0, newTx);
-    return newTx;
+    } catch (_) {
+      isBackendOnline = false;
+    }
+
+    return tx;
   }
 
-  // --- Delete Transaction ---
-  Future<bool> deleteTransaction(int id) async {
+  Future<TransactionModel> updateTransaction(TransactionModel tx, {String? previousCategory}) async {
+    final existingList = StorageService().getTransactions();
+    final oldTx = existingList.firstWhere(
+      (t) => t.id == tx.id,
+      orElse: () => tx,
+    );
+    final oldCat = previousCategory ?? oldTx.category;
+
+    if (oldCat != tx.category && tx.type == "expense") {
+      final budgets = StorageService().getBudgets();
+      for (var b in budgets) {
+        if (b.category == oldCat) {
+          b.spentAmount = (b.spentAmount - tx.amount).clamp(0.0, double.infinity);
+          await StorageService().saveBudget(b);
+        }
+        if (b.category == tx.category) {
+          b.spentAmount += tx.amount;
+          await StorageService().saveBudget(b);
+        }
+      }
+    }
+
+    final saved = await StorageService().saveTransaction(tx);
     try {
-      final res = await http.delete(Uri.parse('$baseUrl/api/transactions/$id')).timeout(const Duration(seconds: 4));
-      if (res.statusCode == 200) return true;
+      if (tx.id != null) {
+        final res = await http.put(
+          Uri.parse('$baseUrl/api/transactions/${tx.id}'),
+          headers: _headers,
+          body: json.encode(tx.toJson()),
+        ).timeout(const Duration(seconds: 4));
+        if (res.statusCode == 200) {
+          return TransactionModel.fromJson(json.decode(res.body));
+        }
+      }
     } catch (_) {}
-    _fallbackTransactions.removeWhere((t) => t.id == id);
+    return saved;
+  }
+
+  Future<bool> deleteTransaction(int id) async {
+    await StorageService().deleteTransaction(id);
+    try {
+      final res = await http.delete(
+        Uri.parse('$baseUrl/api/transactions/$id'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 4));
+      return res.statusCode == 200;
+    } catch (_) {}
     return true;
   }
 
-  // --- Fetch Budgets ---
+  // --- Budgets ---
   Future<List<BudgetModel>> getBudgets() async {
     try {
-      final res = await http.get(Uri.parse('$baseUrl/api/budgets')).timeout(const Duration(seconds: 4));
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/budgets'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 4));
+
       if (res.statusCode == 200) {
+        isBackendOnline = true;
         final List list = json.decode(res.body);
-        return list.map((item) => BudgetModel.fromJson(item)).toList();
+        final budgets = list.map((item) => BudgetModel.fromJson(item)).toList();
+        for (var b in budgets) {
+          await StorageService().saveBudget(b);
+        }
+        return budgets;
       }
-    } catch (_) {}
-    return _fallbackBudgets;
+    } catch (_) {
+      isBackendOnline = false;
+    }
+    return StorageService().getBudgets();
   }
 
   Future<BudgetModel> createOrUpdateBudget(BudgetModel b) async {
+    await StorageService().saveBudget(b);
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/api/budgets'),
-        headers: {'Content-Type': 'application/json'},
+        headers: _headers,
         body: json.encode(b.toJson()),
       ).timeout(const Duration(seconds: 4));
+
       if (res.statusCode == 200) {
         return BudgetModel.fromJson(json.decode(res.body));
       }
     } catch (_) {}
-    final existing = _fallbackBudgets.firstWhere(
-      (item) => item.category == b.category,
-      orElse: () {
-        _fallbackBudgets.add(b);
-        return b;
-      },
-    );
-    existing.allocatedAmount = b.allocatedAmount;
-    return existing;
+    return b;
   }
 
-  // --- Fetch Goals ---
+  // --- Goals ---
   Future<List<SavingsGoalModel>> getGoals() async {
     try {
-      final res = await http.get(Uri.parse('$baseUrl/api/goals')).timeout(const Duration(seconds: 4));
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/goals'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 4));
+
       if (res.statusCode == 200) {
+        isBackendOnline = true;
         final List list = json.decode(res.body);
-        return list.map((item) => SavingsGoalModel.fromJson(item)).toList();
+        final goals = list.map((item) => SavingsGoalModel.fromJson(item)).toList();
+        for (var g in goals) {
+          await StorageService().saveGoal(g);
+        }
+        return goals;
       }
-    } catch (_) {}
-    return _fallbackGoals;
+    } catch (_) {
+      isBackendOnline = false;
+    }
+    return StorageService().getGoals();
   }
 
-  // --- Fetch Analytics ---
-  Future<AnalyticsModel> getAnalytics() async {
+  Future<SavingsGoalModel> createGoal(SavingsGoalModel goal) async {
+    await StorageService().saveGoal(goal);
     try {
-      final res = await http.get(Uri.parse('$baseUrl/api/analytics')).timeout(const Duration(seconds: 4));
+      final res = await http.post(
+        Uri.parse('$baseUrl/api/goals'),
+        headers: _headers,
+        body: json.encode(goal.toJson()),
+      ).timeout(const Duration(seconds: 4));
       if (res.statusCode == 200) {
-        return AnalyticsModel.fromJson(json.decode(res.body));
+        return SavingsGoalModel.fromJson(json.decode(res.body));
       }
     } catch (_) {}
-    
-    // Compute fallback analytics
-    double income = _fallbackTransactions.where((t) => t.type == 'income').fold(0.0, (sum, t) => sum + t.amount);
-    double expense = _fallbackTransactions.where((t) => t.type == 'expense').fold(0.0, (sum, t) => sum + t.amount);
+    return goal;
+  }
+
+  // --- Analytics Dashboard (Calculated from Real Data) ---
+  Future<AnalyticsModel> getAnalytics() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/analytics'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 4));
+
+      if (res.statusCode == 200) {
+        isBackendOnline = true;
+        return AnalyticsModel.fromJson(json.decode(res.body));
+      }
+    } catch (_) {
+      isBackendOnline = false;
+    }
+
+    // Compute from real local storage data
+    final transactions = StorageService().getTransactions();
+    final budgets = StorageService().getBudgets();
+
+    double income = transactions.where((t) => t.type == 'income').fold(0.0, (sum, t) => sum + t.amount);
+    double expense = transactions.where((t) => t.type == 'expense').fold(0.0, (sum, t) => sum + t.amount);
     double savings = income - expense;
-    double savingsRate = income > 0 ? (savings / income * 100) : 0;
-    
-    Map<String, double> catMap = {};
-    for (var t in _fallbackTransactions.where((t) => t.type == 'expense')) {
+    double savingsRate = income > 0 ? (savings / income * 100) : 0.0;
+
+    final Map<String, double> catMap = {};
+    for (var t in transactions.where((t) => t.type == 'expense')) {
       catMap[t.category] = (catMap[t.category] ?? 0.0) + t.amount;
     }
+
+    final needsCats = {"Housing", "Bills & Utilities", "Food & Dining", "Transportation", "Healthcare"};
+    double needsSpent = 0.0;
+    double wantsSpent = 0.0;
+
+    catMap.forEach((cat, amt) {
+      if (needsCats.contains(cat)) {
+        needsSpent += amt;
+      } else {
+        wantsSpent += amt;
+      }
+    });
+
+    final totalBudgetLimit = budgets.fold(0.0, (s, b) => s + b.allocatedAmount);
+    final totalBudgetSpent = budgets.fold(0.0, (s, b) => s + b.spentAmount);
 
     return AnalyticsModel(
       currency: "INR",
@@ -280,12 +270,12 @@ class ApiService {
       totalExpense: expense,
       netSavings: savings,
       savingsRatePct: savingsRate,
-      totalBudgetLimit: _fallbackBudgets.fold(0.0, (s, b) => s + b.allocatedAmount),
-      totalBudgetSpent: _fallbackBudgets.fold(0.0, (s, b) => s + b.spentAmount),
-      budgetHealthPct: 62.4,
+      totalBudgetLimit: totalBudgetLimit,
+      totalBudgetSpent: totalBudgetSpent,
+      budgetHealthPct: totalBudgetLimit > 0 ? (totalBudgetSpent / totalBudgetLimit * 100) : 0.0,
       rule503020: {
-        "needs": {"spent": 22170.0, "actual_pct": 34.1},
-        "wants": {"spent": 7498.0, "actual_pct": 11.5},
+        "needs": {"spent": needsSpent, "actual_pct": income > 0 ? (needsSpent / income * 100) : 0.0},
+        "wants": {"spent": wantsSpent, "actual_pct": income > 0 ? (wantsSpent / income * 100) : 0.0},
         "savings": {"saved": savings, "actual_pct": savingsRate},
       },
       categoryBreakdown: catMap.entries.map((e) => {"category": e.key, "amount": e.value}).toList(),
@@ -297,74 +287,59 @@ class ApiService {
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/api/capture/parse-notification'),
-        headers: {'Content-Type': 'application/json'},
+        headers: _headers,
         body: json.encode({
           'raw_text': rawText,
           'source_app': sourceApp ?? 'notification',
         }),
-      ).timeout(const Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 4));
+
       if (res.statusCode == 200) {
         return json.decode(res.body);
       }
     } catch (_) {}
 
-    // Simulated local parsing fallback
-    return _simulateNotificationParse(rawText);
+    return {
+      "extracted": {"amount": 0.0, "merchant": "Unknown", "is_p2p": false},
+      "categorization": {"category": "Uncategorized", "confidence": 0.0, "needs_user_confirmation": true},
+      "auto_logged": false,
+    };
   }
 
   // --- Learn Merchant Mapping ---
   Future<bool> learnMerchantMapping(String merchantKey, String category) async {
+    await StorageService().saveLearnedMerchant(merchantKey, category);
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/api/dictionary/learn'),
-        headers: {'Content-Type': 'application/json'},
+        headers: _headers,
         body: json.encode({'merchant_key': merchantKey, 'category': category}),
       ).timeout(const Duration(seconds: 3));
       return res.statusCode == 200;
-    } catch (_) {
-      return true;
-    }
+    } catch (_) {}
+    return true;
   }
 
   // --- Weekly Re-planning & Slack Detection ---
-  Future<Map<String, dynamic>> getWeeklyReallocationPlan() async {
+  Future<Map<String, dynamic>?> getWeeklyReallocationPlan() async {
     try {
-      final res = await http.get(Uri.parse('$baseUrl/api/goals/reallocation-plan')).timeout(const Duration(seconds: 6));
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/goals/reallocation-plan'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 5));
+
       if (res.statusCode == 200) {
         return json.decode(res.body);
       }
     } catch (_) {}
-
-    // Local fallback plan
-    return {
-      "month_progress_pct": 90.0,
-      "total_discretionary_slack": 1850.0,
-      "category_slack": {
-        "Entertainment": 1700.0,
-        "Transportation": 150.0,
-      },
-      "proposed_reallocations": [
-        {
-          "goal_id": 1,
-          "goal_title": "MacBook Pro M3 (Laptop)",
-          "proposed_addition": 1295.0,
-          "category_adjustments": {
-            "Entertainment": -1190.0,
-            "Transportation": -105.0,
-          }
-        }
-      ],
-      "agent_message": "⚡ You have ₹1,850 unused slack in Entertainment & Travel. Shifting ₹1,295 to your MacBook Goal accelerates target completion by 14 days without exceeding essentials.",
-      "requires_user_confirmation": true,
-    };
+    return null; // When offline, AI goal reallocation is paused
   }
 
-  // --- Confirm Reallocation ---
   Future<bool> confirmReallocation(int goalId, double additionAmount, Map<String, dynamic> adjustments) async {
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/api/goals/reallocation-plan/confirm'),
-        headers: {'Content-Type': 'application/json'},
+        headers: _headers,
         body: json.encode({
           'goal_id': goalId,
           'addition_amount': additionAmount,
@@ -372,12 +347,8 @@ class ApiService {
         }),
       ).timeout(const Duration(seconds: 4));
       return res.statusCode == 200;
-    } catch (_) {
-      // Local fallback update
-      final goal = _fallbackGoals.firstWhere((g) => g.id == goalId, orElse: () => _fallbackGoals.first);
-      goal.currentProgress += additionAmount;
-      return true;
-    }
+    } catch (_) {}
+    return false;
   }
 
   // --- AI Agent Chat ---
@@ -385,69 +356,21 @@ class ApiService {
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/api/agent/chat'),
-        headers: {'Content-Type': 'application/json'},
+        headers: _headers,
         body: json.encode({'agent': agent, 'message': message}),
       ).timeout(const Duration(seconds: 12));
+
       if (res.statusCode == 200) {
         return json.decode(res.body);
       }
     } catch (_) {}
 
-    // Local simulated responses
-    if (agent == 'auditor') {
-      return {
-        "agent": "auditor",
-        "role_title": "Forensic Expense Auditor",
-        "response": "🔍 **Forensic Audit Findings**:\n\n1. **Discretionary Spike**: Identified a **₹6,499** Nike purchase on Sep 18. Shopping spend is currently at 81% of its monthly allocation.\n2. **Subscription Audit**: Recurring services (Netflix & Spotify) cost **₹999/mo** (~1.5% of total income).\n3. **Healthy Essentials**: Rent & Utilities are strictly within predefined limits.",
-        "model_used": "llama3.2 (local simulation)",
-        "source": "simulated"
-      };
-    } else if (agent == 'advisor') {
-      return {
-        "agent": "advisor",
-        "role_title": "Budget Advisor",
-        "response": "📊 **50/30/20 Rule Analysis**:\n\n- **Needs**: ₹22,170 (34.1% of ₹65k income) — **Optimal** (Target is 50%).\n- **Wants**: ₹7,498 (11.5% of income) — **Healthy** (Target is 30%).\n- **Savings Potential**: **₹35,332** available net cash flow!\n\n💡 **Tip**: Consider moving ₹15,000 to your Emergency Safety Fund to maintain momentum.",
-        "model_used": "llama3.2 (local simulation)",
-        "source": "simulated"
-      };
-    } else {
-      return {
-        "agent": "strategist",
-        "role_title": "Wealth & Goal Strategist",
-        "response": "💎 **Goal Milestone Status**:\n\n- **MacBook Pro M3**: ₹24,000 / ₹60,000 (40.0% achieved). At current monthly savings, you will hit 100% by February 2027 (ahead of schedule by 30 days).\n- **Emergency Safety Fund**: ₹95,000 / ₹150,000 (63.3% funded).",
-        "model_used": "llama3.2 (local simulation)",
-        "source": "simulated"
-      };
-    }
-  }
-
-  Map<String, dynamic> _simulateNotificationParse(String text) {
-    bool isP2P = text.toLowerCase().contains("to rahul") || text.toLowerCase().contains("sent to") || text.toLowerCase().contains("@upi");
-    double amt = 450.0;
-    if (text.contains("1200") || text.contains("1,200")) amt = 1200.0;
-    if (text.contains("6499") || text.contains("6,499")) amt = 6499.0;
-    if (text.contains("2450") || text.contains("2,450")) amt = 2450.0;
-
-    String merchant = isP2P ? "Rahul Sharma" : (text.toLowerCase().contains("swiggy") ? "Swiggy" : (text.toLowerCase().contains("bescom") ? "BESCOM" : "Local Vendor"));
-    String cat = isP2P ? "P2P Transfer" : (text.toLowerCase().contains("swiggy") ? "Food & Dining" : (text.toLowerCase().contains("bescom") ? "Bills & Utilities" : "Shopping"));
-    double conf = isP2P ? 0.40 : (text.toLowerCase().contains("swiggy") ? 1.0 : 0.65);
-
     return {
-      "extracted": {
-        "amount": amt,
-        "merchant": merchant,
-        "is_p2p": isP2P,
-        "raw_text": text,
-        "date": DateTime.now().toIso8601String().substring(0, 10),
-      },
-      "categorization": {
-        "category": cat,
-        "confidence": conf,
-        "needs_user_confirmation": conf < 0.85,
-        "source": isP2P ? "p2p_detection" : (conf == 1.0 ? "dictionary" : "heuristic"),
-        "matched_key": merchant.toLowerCase(),
-      },
-      "auto_logged": conf >= 0.85,
+      "agent": agent,
+      "role_title": "FinTrack Assistant",
+      "response": "⚠️ Local/Offline Mode: Ollama backend is currently unreachable. Connect to your server to chat with live multi-agent models.",
+      "model_used": "offline",
+      "source": "offline"
     };
   }
 }

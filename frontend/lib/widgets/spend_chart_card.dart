@@ -14,7 +14,6 @@ class SpendChartCard extends StatefulWidget {
 class _SpendChartCardState extends State<SpendChartCard> {
   String _timeframe = "Daily"; // "Daily", "Weekly", "Monthly"
 
-  // Realistic sample points for each view
   final Map<String, List<Map<String, dynamic>>> _chartData = {
     "Daily": [
       {"label": "Mon", "amount": 420.0, "ratio": 0.35},
@@ -45,7 +44,7 @@ class _SpendChartCardState extends State<SpendChartCard> {
 
     return GlassCard(
       margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -57,40 +56,49 @@ class _SpendChartCardState extends State<SpendChartCard> {
                 children: [
                   const Text(
                     "Spend Velocity Trend",
-                    style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w700),
+                    style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     "$_timeframe Distribution",
-                    style: const TextStyle(color: AppTheme.textMuted, fontSize: 11.5),
+                    style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
                   ),
                 ],
               ),
 
-              // Daily / Weekly / Monthly Toggle Chips
+              // GlassCard radius 30 segmented control container
               Container(
-                padding: const EdgeInsets.all(3),
+                padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: const Color(0x1AFFFFFF),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.glassBorder),
+                  color: AppTheme.glassSurface,
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: AppTheme.glassBorder, width: 1.2),
                 ),
                 child: Row(
                   children: ["Daily", "Weekly", "Monthly"].map((tf) {
                     final isSelected = _timeframe == tf;
                     return InkWell(
                       onTap: () => setState(() => _timeframe = tf),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(24),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
-                          color: isSelected ? AppTheme.tealPrimary : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
+                          color: isSelected ? Colors.white : Colors.transparent,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.06),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
                         ),
                         child: Text(
                           tf,
                           style: TextStyle(
-                            color: isSelected ? const Color(0xFF042F2E) : AppTheme.textMuted,
+                            color: isSelected ? AppTheme.tealPrimary : AppTheme.textMuted,
                             fontSize: 11,
                             fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
                           ),
@@ -115,7 +123,7 @@ class _SpendChartCardState extends State<SpendChartCard> {
                 final double ratio = p["ratio"];
                 final String label = p["label"];
                 final double amount = p["amount"];
-                final isHighlight = ratio > 0.8;
+                final isHigh = ratio >= 0.9;
 
                 return Expanded(
                   child: Padding(
@@ -126,8 +134,8 @@ class _SpendChartCardState extends State<SpendChartCard> {
                         Text(
                           "₹${amount > 999 ? '${(amount / 1000).toStringAsFixed(1)}k' : amount.toStringAsFixed(0)}",
                           style: TextStyle(
-                            color: isHighlight ? AppTheme.tealLight : AppTheme.textMuted,
-                            fontSize: 9.5,
+                            color: isHigh ? AppTheme.roseDanger : AppTheme.textSecondary,
+                            fontSize: 10,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -135,13 +143,7 @@ class _SpendChartCardState extends State<SpendChartCard> {
                         Container(
                           height: (ratio * 75).clamp(8.0, 75.0),
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: isHighlight
-                                  ? [AppTheme.tealPrimary, AppTheme.lavenderAccent]
-                                  : [AppTheme.tealPrimary.withValues(alpha: 0.5), AppTheme.tealDark.withValues(alpha: 0.3)],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            ),
+                            color: isHigh ? AppTheme.roseDanger : AppTheme.tealPrimary,
                             borderRadius: BorderRadius.circular(6),
                           ),
                         ),
