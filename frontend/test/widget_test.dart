@@ -8,7 +8,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify app launches successfully and displays title
-    expect(find.text('FinTrack AI'), findsOneWidget);
-    expect(find.text('Dashboard'), findsWidgets);
+    expect(find.text('FinTrack'), findsOneWidget);
+    expect(find.text('Home'), findsWidgets);
   });
 }
