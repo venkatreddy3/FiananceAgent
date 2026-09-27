@@ -220,6 +220,28 @@ class ApiService {
     return _fallbackBudgets;
   }
 
+  Future<BudgetModel> createOrUpdateBudget(BudgetModel b) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/api/budgets'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(b.toJson()),
+      ).timeout(const Duration(seconds: 4));
+      if (res.statusCode == 200) {
+        return BudgetModel.fromJson(json.decode(res.body));
+      }
+    } catch (_) {}
+    final existing = _fallbackBudgets.firstWhere(
+      (item) => item.category == b.category,
+      orElse: () {
+        _fallbackBudgets.add(b);
+        return b;
+      },
+    );
+    existing.allocatedAmount = b.allocatedAmount;
+    return existing;
+  }
+
   // --- Fetch Goals ---
   Future<List<SavingsGoalModel>> getGoals() async {
     try {
